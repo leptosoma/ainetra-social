@@ -60,16 +60,57 @@ enum PublishAttemptStatus {
   FAILED
 }
 
+enum BusinessAnalysisStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  INVALID_OUTPUT
+}
+
+enum BusinessAttributeSource {
+  USER
+  WEBSITE
+  INSTAGRAM
+  AI_INFERENCE
+  IMPORT
+}
+
+enum BusinessAttributeStatus {
+  CONFIRMED
+  INFERRED
+  NEEDS_CONFIRMATION
+  REJECTED
+}
+
+enum BusinessAttributeCategory {
+  DESCRIPTION
+  PRODUCTS_SERVICES
+  TARGET_AUDIENCE
+  LANGUAGE
+  BRAND_TONE
+  BRAND_PERSONALITY
+  LOCATION_CONTEXT
+  WEBSITE
+  INSTAGRAM_IDENTITY
+  BUSINESS_GOAL
+  FACT
+  RESTRICTION
+  AVOID_WORD
+  NOTE
+}
+
 model User {
-  id           String       @id @default(cuid())
-  name         String
-  email        String       @unique
-  passwordHash String
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  memberships  Membership[]
-  sessions     Session[]
-  approvals    Approval[]
+  id                          String                @id @default(cuid())
+  name                        String
+  email                       String                @unique
+  passwordHash                String
+  createdAt                   DateTime              @default(now())
+  updatedAt                   DateTime              @updatedAt
+  memberships                 Membership[]
+  sessions                    Session[]
+  approvals                   Approval[]
+  analysisRuns                BusinessAnalysisRun[] @relation("AnalysisTriggeredBy")
+  confirmedBusinessAttributes BusinessAttribute[]   @relation("AttributeConfirmedBy")
 }
 
 model Session {
@@ -85,15 +126,15 @@ model Session {
 }
 
 model Business {
-  id              String           @id @default(cuid())
+  id              String                @id @default(cuid())
   name            String
   sector          String
   location        String?
   website         String?
   instagramHandle String?
-  timezone        String           @default("Europe/Istanbul")
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  timezone        String                @default("Europe/Istanbul")
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
   memberships     Membership[]
   brandProfile    BrandProfile?
   goals           BusinessGoal[]
@@ -102,6 +143,60 @@ model Business {
   contentItems    ContentItem[]
   scheduledPosts  ScheduledPost[]
   aiInsights      AIInsight[]
+  analysisRuns    BusinessAnalysisRun[]
+  attributes      BusinessAttribute[]
+}
+
+model BusinessAnalysisRun {
+  id             String                 @id @default(cuid())
+  businessId     String
+  triggeredById  String?
+  provider       String
+  model          String
+  promptVersion  String
+  inputSources   Json
+  outputSnapshot Json?
+  status         BusinessAnalysisStatus @default(PENDING)
+  errorCode      String?
+  startedAt      DateTime               @default(now())
+  completedAt    DateTime?
+  createdAt      DateTime               @default(now())
+  business       Business               @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  triggeredBy    User?                  @relation("AnalysisTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
+  attributes     BusinessAttribute[]
+
+  @@index([businessId, status, createdAt])
+  @@index([triggeredById])
+}
+
+model BusinessAttribute {
+  id                 String                    @id @default(cuid())
+  businessId         String
+  analysisRunId      String?
+  category           BusinessAttributeCategory
+  key                String
+  value              Json
+  source             BusinessAttributeSource
+  sourceReference    String?
+  confidence         Float?
+  verificationStatus BusinessAttributeStatus
+  isCanonical        Boolean                   @default(false)
+  supersedesId       String?
+  confirmedAt        DateTime?
+  confirmedById      String?
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  business           Business                  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  analysisRun        BusinessAnalysisRun?      @relation(fields: [analysisRunId], references: [id], onDelete: SetNull)
+  supersedes         BusinessAttribute?        @relation("AttributeSupersession", fields: [supersedesId], references: [id], onDelete: SetNull)
+  supersededBy       BusinessAttribute[]       @relation("AttributeSupersession")
+  confirmedBy        User?                     @relation("AttributeConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
+
+  @@index([businessId, key])
+  @@index([businessId, category, verificationStatus])
+  @@index([analysisRunId])
+  @@index([supersedesId])
+  @@index([confirmedById])
 }
 
 model Membership {
@@ -131,12 +226,12 @@ model BrandProfile {
 }
 
 model BusinessGoal {
-  id         String       @id @default(cuid())
+  id         String        @id @default(cuid())
   businessId String
   type       String
   priority   GoalPriority
-  createdAt  DateTime     @default(now())
-  business   Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt  DateTime      @default(now())
+  business   Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
   content    ContentItem[]
 
   @@unique([businessId, type])
@@ -176,41 +271,41 @@ model MediaAsset {
 }
 
 model ContentItem {
-  id         String        @id @default(cuid())
-  businessId String
-  goalId     String?
-  title      String
-  topic      String
+  id          String           @id @default(cuid())
+  businessId  String
+  goalId      String?
+  title       String
+  topic       String
   contentType ContentType
-  status     ContentStatus @default(DRAFT)
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
-  business   Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  goal       BusinessGoal? @relation(fields: [goalId], references: [id], onDelete: SetNull)
-  variants   ContentVariant[]
+  status      ContentStatus    @default(DRAFT)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  business    Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  goal        BusinessGoal?    @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  variants    ContentVariant[]
 
   @@index([businessId, createdAt])
 }
 
 model ContentVariant {
-  id                 String         @id @default(cuid())
-  contentItemId      String
-  platform           SocialPlatform
-  caption            String
-  cta                 String?
-  language            String         @default("tr")
-  mediaAssetId        String?
-  aspectRatio         String?
-  formatMetadata      Json            @default("{}")
-  version             Int             @default(1)
-  exportedAt          DateTime?
-  exportedVersion     Int?
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
-  contentItem         ContentItem     @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
-  mediaAsset          MediaAsset?     @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
-  approvals           Approval[]
-  scheduledPosts      ScheduledPost[]
+  id              String          @id @default(cuid())
+  contentItemId   String
+  platform        SocialPlatform
+  caption         String
+  cta             String?
+  language        String          @default("tr")
+  mediaAssetId    String?
+  aspectRatio     String?
+  formatMetadata  Json            @default("{}")
+  version         Int             @default(1)
+  exportedAt      DateTime?
+  exportedVersion Int?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  contentItem     ContentItem     @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+  mediaAsset      MediaAsset?     @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  approvals       Approval[]
+  scheduledPosts  ScheduledPost[]
 
   @@unique([contentItemId, platform])
   @@index([mediaAssetId])

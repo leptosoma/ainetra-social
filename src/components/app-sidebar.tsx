@@ -8,6 +8,7 @@ const navigation = [
   ["□", "Takvim", "/calendar"],
   ["▧", "Medya", "/media"],
   ["◇", "Marka", "/brand"],
+  ["◈", "Business Brain", "/business-brain"],
   ["⚙", "Ayarlar", "/settings"],
 ];
 

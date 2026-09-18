@@ -2,7 +2,7 @@
 
 Ainetra Social; otel, restoran ve yerel işletmelerin sosyal medya içeriklerini marka bağlamıyla oluşturmasına, sürüm bazlı onaylamasına ve yayına hazırlamasına temel sağlayan çok kiracılı (multi-tenant) bir SaaS uygulamasıdır.
 
-Bu repository **Phase 1 production foundation** çalışmasıdır. Claude Artifact içinde bulunan ilk prototipten bağımsızdır; prototipin dosyalarını kullanmaz veya değiştirmez.
+Bu repository Phase 1 production foundation üzerine kurulu **Phase 2 Ainetra Business Brain** uygulamasını içerir. Claude Artifact içinde bulunan ilk prototipten bağımsızdır; prototipin dosyalarını kullanmaz veya değiştirmez.
 
 ## Stack
 
@@ -44,6 +44,9 @@ Seed komutu idempotenttir. Demo kullanıcının bir işletmesi zaten varsa mevcu
 | `SESSION_SECRET` | Gelecekteki imzalı token/crypto işlemleri için sunucu sırrı; üretimde en az 32 rastgele karakter kullanın |
 | `LOCAL_STORAGE_ROOT` | Development dosya adapter’ının kök klasörü |
 | `MAX_UPLOAD_BYTES` | Tek görsel için byte sınırı; varsayılan 8 MB |
+| `BUSINESS_BRAIN_API_URL` | İsteğe bağlı, JSON döndüren text AI provider endpoint'i |
+| `BUSINESS_BRAIN_API_KEY` | İsteğe bağlı provider anahtarı; yalnızca sunucuda okunur |
+| `BUSINESS_BRAIN_MODEL` | İsteğe bağlı provider model kimliği |
 
 `.env` ve `.env.test` Git’e eklenmez. Gerçek secret veya sosyal medya token’ı istemciye gönderilmez.
 
@@ -83,6 +86,15 @@ Kapsanan kritik kurallar:
 9. Export, published durumu veya publish attempt oluşturmaz.
 10. Başka işletmenin sosyal hesabıyla planlama yapılamaz.
 
+Business Brain testleri ayrıca şunları doğrular:
+
+- `NEEDS_CONFIRMATION` ve `REJECTED` bilgiler canonical bağlama girmez; yalnızca onaylı kayıtlar girer.
+- Tenant dışı Business Brain okuma ve değiştirme reddedilir.
+- Geçersiz provider çıktısı attribute yazmadan `INVALID_OUTPUT` olur.
+- Öneri kabul ve ret geçişleri ile mevcut hedef sınırları korunur.
+- Local/private web adresleri reddedilir ve web sitesi hatası onboarding akışını durdurmaz.
+- Yeniden analiz, kullanıcı tarafından onaylanmış veriyi değiştirmez; farklı sonuç ayrı öneri olur.
+
 ## Architecture overview
 
 ```text
@@ -98,6 +110,7 @@ src/
     content/            Content/variant creation, versioning, export
     approval/           Version-aware approvals
     publishing/         Schedule validation and publishability checks
+    business-brain/     Website reader, prompt, provider boundary, verification ledger ve canonical context
   lib/
     authorization.ts    Membership-based tenant boundary
     db.ts               Prisma/PostgreSQL adapter
@@ -138,10 +151,16 @@ PostgreSQL içinde dosya blob’u tutulmaz. Veritabanında yalnızca metadata ve
 - Mimoza Bodrum Restaurant development seed’i
 - PostgreSQL-backed domain/integration testleri
 - PublishAttempt, PostPerformance ve AIInsight için minimum genişleme noktaları
+- Business Brain onboarding ve “İşletmeni böyle anladım” doğrulama ekranı
+- Alan bazında source, confidence ve CONFIRMED / INFERRED / NEEDS_CONFIRMATION / REJECTED durumları
+- Accept, edit, reject ve eksik bilgi ekleme akışları
+- Analiz provider/model/prompt version ve kaynak metadata geçmişi
+- `buildBusinessContext(userId, businessId)` ile yalnızca kullanıcı verisi ve onaylı attribute'lardan güvenilir bağlam
+- SSRF korumalı web okuma: private IP engeli, DNS çözümleme kontrolü, yönlendirme kontrolü, timeout ve boyut sınırı
+- Beş eksenli marka kişiliği ve kullanıcı onaylı hedef önerileri
 
 ## NOT IMPLEMENTED YET
 
-- AI Business Analysis
 - AI Content Planning
 - Capture Engine
 - Fallback Engine
@@ -155,6 +174,14 @@ PostgreSQL içinde dosya blob’u tutulmaz. Veritabanında yalnızca metadata ve
 - Gelişmiş ekip, rol ve onay akışları
 
 Bu maddeler UI’da gerçek özellik gibi gösterilmez. Dummy sosyal hesap yalnızca Phase 1 iş akışını test etmek içindir.
+
+## Business Brain provider davranışı
+
+Uygulama kodu provider'a bağlı değildir. `BusinessBrainExtractionProvider` sınırı, doğrulanmış `business-brain-v1` JSON sözleşmesi döndürür. Provider ayarları yoksa çalışan geliştirme sürümü `local / grounded-heuristic-v1` kullanır; bu adapter yalnızca güvenli şekilde önceden alınmış web metnindeki açık sinyalleri çıkarır, kişilik/hedef gibi AI inference üretmez ve belirsiz alanları onaya bırakır. Üç provider environment değeri birlikte verildiğinde server-side HTTP JSON adapter devreye girer.
+
+Canonical context'te aynı kavram hem eski `BrandProfile` alanında hem doğrulama defterinde bulunursa, kullanıcının açıkça onayladığı canonical ledger değeri önceliklidir. Böylece sonraki modüller iki çelişkili açıklama veya hedef kitle değeri görmez.
+
+Web sitesi içeriği dış ve güvenilmez veri olarak prompt içinde ayrı sınırlandırılır. Modelin URL çağırmasına izin verilmez; kaynakları yalnızca backend getirir. Şema dışı çıktı, kanıtsız website değeri ve factual alanlardaki temelsiz AI inference kalıcı işletme verisine yazılmaz.
 
 ## Production notes
 

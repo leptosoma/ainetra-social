@@ -49,10 +49,11 @@ export async function updateBrandAction(formData: FormData) {
     languages: str(formData, "languages").split(",").map((entry) => entry.trim()).filter(Boolean),
     productsSummary: str(formData, "productsSummary"),
     toneDimensions: {
-      friendly: Number(str(formData, "friendly") || 70),
-      premium: Number(str(formData, "premium") || 70),
-      modern: Number(str(formData, "modern") || 65),
-      playful: Number(str(formData, "playful") || 35),
+      corporateFriendly: Number(str(formData, "corporateFriendly") || 65),
+      minimalVibrant: Number(str(formData, "minimalVibrant") || 50),
+      luxuryAccessible: Number(str(formData, "luxuryAccessible") || 45),
+      modernNatural: Number(str(formData, "modernNatural") || 50),
+      seriousPlayful: Number(str(formData, "seriousPlayful") || 40),
     },
   });
   revalidatePath("/brand");

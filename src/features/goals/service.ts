@@ -5,8 +5,7 @@ import { DomainError } from "@/lib/domain-error";
 
 export type GoalInput = { type: string; priority: GoalPriority };
 
-export async function replaceBusinessGoals(userId: string, businessId: string, goals: GoalInput[]) {
-  await requireMembership(userId, businessId);
+export function normalizeAndValidateGoals(goals: GoalInput[]) {
   const normalized = goals.map((goal) => ({
     type: goal.type.trim().toUpperCase().replace(/\s+/g, "_"),
     priority: goal.priority,
@@ -22,7 +21,12 @@ export async function replaceBusinessGoals(userId: string, businessId: string, g
   if (new Set(normalized.map((goal) => goal.type)).size !== normalized.length) {
     throw new DomainError("Aynı hedef birden fazla kez seçilemez.", "VALIDATION_ERROR");
   }
+  return normalized;
+}
 
+export async function replaceBusinessGoals(userId: string, businessId: string, goals: GoalInput[]) {
+  await requireMembership(userId, businessId);
+  const normalized = normalizeAndValidateGoals(goals);
   return prisma.$transaction(async (tx) => {
     await tx.businessGoal.deleteMany({
       where: { businessId, type: { notIn: normalized.map((goal) => goal.type) } },

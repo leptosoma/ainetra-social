@@ -45,7 +45,7 @@ async function main() {
           targetAudience: "Bodrum'da iyi yemek, gün batımı ve seçkin ama rahat bir deneyim arayan yerli ve yabancı misafirler.",
           languages: ["tr", "en"],
           productsSummary: "Mevsimsel Ege mutfağı, steak seçenekleri, imza kokteyller ve canlı müzik akşamları.",
-          toneDimensions: { friendly: 78, premium: 74, modern: 68, playful: 38 },
+          toneDimensions: { corporateFriendly: 78, minimalVibrant: 58, luxuryAccessible: 34, modernNatural: 55, seriousPlayful: 38 },
         },
       },
     },
