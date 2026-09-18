@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ainetra
+      POSTGRES_PASSWORD: ainetra_dev
+      POSTGRES_DB: ainetra_social
+    ports:
+      - "55432:5432"
+    volumes:
+      - ainetra-postgres:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ainetra -d ainetra_social"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  ainetra-postgres:

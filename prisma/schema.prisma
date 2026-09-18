@@ -1,0 +1,283 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum MembershipRole {
+  OWNER
+  MEMBER
+}
+
+enum GoalPriority {
+  PRIMARY
+  SECONDARY
+}
+
+enum SocialPlatform {
+  INSTAGRAM
+  FACEBOOK
+  TIKTOK
+}
+
+enum SocialAccountStatus {
+  CONNECTED
+  DISCONNECTED
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+enum ContentType {
+  POST
+  REEL
+  STORY
+  CAROUSEL
+}
+
+enum ContentStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum ScheduledPostStatus {
+  SCHEDULED
+  INVALIDATED
+  CANCELLED
+  PUBLISHED
+  FAILED
+}
+
+enum PublishAttemptStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+model User {
+  id           String       @id @default(cuid())
+  name         String
+  email        String       @unique
+  passwordHash String
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  memberships  Membership[]
+  sessions     Session[]
+  approvals    Approval[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Business {
+  id              String           @id @default(cuid())
+  name            String
+  sector          String
+  location        String?
+  website         String?
+  instagramHandle String?
+  timezone        String           @default("Europe/Istanbul")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  memberships     Membership[]
+  brandProfile    BrandProfile?
+  goals           BusinessGoal[]
+  socialAccounts  SocialAccount[]
+  mediaAssets     MediaAsset[]
+  contentItems    ContentItem[]
+  scheduledPosts  ScheduledPost[]
+  aiInsights      AIInsight[]
+}
+
+model Membership {
+  id         String         @id @default(cuid())
+  userId     String
+  businessId String
+  role       MembershipRole @default(MEMBER)
+  createdAt  DateTime       @default(now())
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business   Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, businessId])
+  @@index([businessId])
+}
+
+model BrandProfile {
+  id              String   @id @default(cuid())
+  businessId      String   @unique
+  description     String   @default("")
+  targetAudience  String   @default("")
+  languages       String[] @default(["tr"])
+  productsSummary String   @default("")
+  toneDimensions  Json     @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+}
+
+model BusinessGoal {
+  id         String       @id @default(cuid())
+  businessId String
+  type       String
+  priority   GoalPriority
+  createdAt  DateTime     @default(now())
+  business   Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  content    ContentItem[]
+
+  @@unique([businessId, type])
+  @@index([businessId, priority])
+}
+
+model SocialAccount {
+  id                String              @id @default(cuid())
+  businessId        String
+  platform          SocialPlatform
+  displayName       String
+  externalAccountId String?
+  status            SocialAccountStatus @default(DISCONNECTED)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  business          Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  scheduledPosts    ScheduledPost[]
+
+  @@index([businessId])
+}
+
+model MediaAsset {
+  id               String           @id @default(cuid())
+  businessId       String
+  type             MediaType        @default(IMAGE)
+  originalFilename String
+  mimeType         String
+  size             Int
+  width            Int?
+  height           Int?
+  storageKey       String           @unique
+  createdAt        DateTime         @default(now())
+  business         Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  variants         ContentVariant[]
+
+  @@index([businessId, createdAt])
+}
+
+model ContentItem {
+  id         String        @id @default(cuid())
+  businessId String
+  goalId     String?
+  title      String
+  topic      String
+  contentType ContentType
+  status     ContentStatus @default(DRAFT)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  business   Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  goal       BusinessGoal? @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  variants   ContentVariant[]
+
+  @@index([businessId, createdAt])
+}
+
+model ContentVariant {
+  id                 String         @id @default(cuid())
+  contentItemId      String
+  platform           SocialPlatform
+  caption            String
+  cta                 String?
+  language            String         @default("tr")
+  mediaAssetId        String?
+  aspectRatio         String?
+  formatMetadata      Json            @default("{}")
+  version             Int             @default(1)
+  exportedAt          DateTime?
+  exportedVersion     Int?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  contentItem         ContentItem     @relation(fields: [contentItemId], references: [id], onDelete: Cascade)
+  mediaAsset          MediaAsset?     @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  approvals           Approval[]
+  scheduledPosts      ScheduledPost[]
+
+  @@unique([contentItemId, platform])
+  @@index([mediaAssetId])
+}
+
+model Approval {
+  id               String         @id @default(cuid())
+  contentVariantId String
+  approvedVersion  Int
+  approvedById     String
+  approvedAt       DateTime       @default(now())
+  contentVariant   ContentVariant @relation(fields: [contentVariantId], references: [id], onDelete: Cascade)
+  approvedBy       User           @relation(fields: [approvedById], references: [id], onDelete: Restrict)
+
+  @@unique([contentVariantId, approvedVersion])
+  @@index([approvedById])
+}
+
+model ScheduledPost {
+  id               String              @id @default(cuid())
+  businessId       String
+  socialAccountId  String
+  contentVariantId String
+  contentVersion   Int
+  scheduledAt      DateTime
+  status           ScheduledPostStatus @default(SCHEDULED)
+  invalidatedAt    DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  business         Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  socialAccount    SocialAccount       @relation(fields: [socialAccountId], references: [id], onDelete: Restrict)
+  contentVariant   ContentVariant      @relation(fields: [contentVariantId], references: [id], onDelete: Cascade)
+  publishAttempts  PublishAttempt[]
+  performance      PostPerformance?
+
+  @@index([businessId, scheduledAt])
+  @@index([status, scheduledAt])
+}
+
+model PublishAttempt {
+  id              String               @id @default(cuid())
+  scheduledPostId String
+  status          PublishAttemptStatus @default(PENDING)
+  errorCode       String?
+  errorMessage    String?
+  attemptedAt     DateTime             @default(now())
+  scheduledPost   ScheduledPost        @relation(fields: [scheduledPostId], references: [id], onDelete: Cascade)
+
+  @@index([scheduledPostId, attemptedAt])
+}
+
+model PostPerformance {
+  id              String        @id @default(cuid())
+  scheduledPostId String        @unique
+  impressions     Int?
+  engagements     Int?
+  capturedAt      DateTime      @default(now())
+  scheduledPost   ScheduledPost @relation(fields: [scheduledPostId], references: [id], onDelete: Cascade)
+}
+
+model AIInsight {
+  id         String   @id @default(cuid())
+  businessId String
+  kind       String
+  message    String
+  createdAt  DateTime @default(now())
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, createdAt])
+}
