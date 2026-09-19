@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Image from "next/image";
-import { deleteMediaAction, uploadMediaAction } from "@/actions/media";
+import { deleteMediaAction, updateMediaPlanningTagsAction, uploadMediaAction } from "@/actions/media";
+import { imagePlanningTags } from "@/features/media/service";
 import { getCurrentUser } from "@/features/auth/session";
 import { getFirstBusinessForUser } from "@/lib/authorization";
 import { prisma } from "@/lib/db";
@@ -18,13 +19,13 @@ export default async function MediaPage() {
       <PageHeader eyebrow="Asset library" title="Medya" description="İşletmenize ait görselleri güvenle yükleyin ve içeriklerde yeniden kullanın." />
       <section className="upload-zone">
         <div><span className="upload-icon">＋</span><h2>Yeni görsel yükleyin</h2><p>JPEG, PNG veya WebP · en fazla 8 MB</p></div>
-        <form action={uploadMediaAction}><input type="hidden" name="businessId" value={business.id} /><input name="file" type="file" accept="image/jpeg,image/png,image/webp" required /><button className="button primary" type="submit">Kütüphaneye ekle</button></form>
+        <form action={uploadMediaAction} className="media-upload-form"><input type="hidden" name="businessId" value={business.id} /><input name="file" type="file" accept="image/jpeg,image/png,image/webp" required /><div className="media-tag-options">{imagePlanningTags.map((tag) => <label key={tag}><input type="checkbox" name="tags" value={tag} />{tag.replaceAll("_", " ")}</label>)}</div><button className="button primary" type="submit">Kütüphaneye ekle</button></form>
       </section>
       <section className="media-grid">
         {assets.map((asset, index) => (
           <article className="media-card" key={asset.id}>
             <Image unoptimized loading={index === 0 ? "eager" : "lazy"} src={`/media/${asset.id}`} alt={asset.originalFilename} width={asset.width ?? 1200} height={asset.height ?? 1200} />
-            <div><strong title={asset.originalFilename}>{asset.originalFilename}</strong><small>{asset.width}×{asset.height} · {(asset.size / 1024 / 1024).toFixed(1)} MB</small><small>{asset._count.variants} içerikte kullanılıyor</small></div>
+            <div><strong title={asset.originalFilename}>{asset.originalFilename}</strong><small>{asset.width}×{asset.height} · {(asset.size / 1024 / 1024).toFixed(1)} MB</small><small>{asset._count.variants} içerikte kullanılıyor</small><form action={updateMediaPlanningTagsAction} className="media-tag-form"><input type="hidden" name="mediaAssetId" value={asset.id} /><div className="media-tag-options">{imagePlanningTags.map((tag) => <label key={tag}><input type="checkbox" name="tags" value={tag} defaultChecked={asset.tags.includes(tag)} />{tag.replaceAll("_", " ")}</label>)}</div><button className="mini-button" type="submit">Etiketleri kaydet</button></form></div>
             <form action={deleteMediaAction}><input type="hidden" name="mediaAssetId" value={asset.id} /><button className="icon-button" type="submit" aria-label="Medyayı sil" disabled={asset._count.variants > 0}>×</button></form>
           </article>
         ))}

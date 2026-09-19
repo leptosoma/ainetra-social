@@ -99,6 +99,80 @@ enum BusinessAttributeCategory {
   NOTE
 }
 
+enum PlatformRuleCategory {
+  FREQUENCY
+  FORMAT
+  ASPECT_RATIO
+  VIDEO_LENGTH
+  HOOK
+  SAFE_ZONE
+  CAPTION
+  CTA
+  ORIGINALITY
+  CONTENT_DIVERSITY
+  POSTING_TIME
+  AUDIO
+  SUBTITLES
+}
+
+enum PlatformRecommendationType {
+  TECHNICAL_REQUIREMENT
+  BEST_PRACTICE
+  GENERAL_RECOMMENDATION
+  BUSINESS_LEARNED
+}
+
+enum PlatformRuleSource {
+  OFFICIAL_PLATFORM
+  VERIFIED_INTERNAL_ANALYSIS
+  BUSINESS_PERFORMANCE
+  MANUAL_ADMIN_RULE
+}
+
+enum ContentStrategyMode {
+  AINETRA_RECOMMENDED
+  CUSTOM
+}
+
+enum ContentPlanPeriod {
+  SEVEN_DAYS
+  THIRTY_DAYS
+}
+
+enum ContentPlanStatus {
+  DRAFT
+  APPROVED
+  SUPERSEDED
+}
+
+enum ContentPlanItemStatus {
+  ACTIVE
+  REPLACED
+}
+
+enum ContentPlanningRunStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  INVALID_OUTPUT
+}
+
+enum MediaRequirement {
+  PHOTO_PRODUCT
+  PHOTO_ATMOSPHERE
+  PHOTO_PEOPLE
+  VIDEO_VERTICAL
+  VIDEO_KITCHEN
+  CUSTOM_GRAPHIC
+  NO_NEW_MEDIA_REQUIRED
+}
+
+enum MediaAvailability {
+  AVAILABLE
+  MISSING
+  NOT_REQUIRED
+}
+
 model User {
   id                          String                @id @default(cuid())
   name                        String
@@ -111,6 +185,8 @@ model User {
   approvals                   Approval[]
   analysisRuns                BusinessAnalysisRun[] @relation("AnalysisTriggeredBy")
   confirmedBusinessAttributes BusinessAttribute[]   @relation("AttributeConfirmedBy")
+  approvedContentPlans        ContentPlan[]         @relation("ContentPlanApprovedBy")
+  contentPlanningRuns         ContentPlanningRun[]  @relation("PlanningTriggeredBy")
 }
 
 model Session {
@@ -145,6 +221,152 @@ model Business {
   aiInsights      AIInsight[]
   analysisRuns    BusinessAnalysisRun[]
   attributes      BusinessAttribute[]
+  platformRules   PlatformRule[]
+  contentStrategy ContentStrategy?
+  contentPlans    ContentPlan[]
+  planningRuns    ContentPlanningRun[]
+}
+
+model ContentPlanningRun {
+  id            String                   @id @default(cuid())
+  businessId    String
+  triggeredById String
+  period        ContentPlanPeriod
+  scope         String
+  provider      String
+  model         String
+  promptVersion String
+  inputHash     String
+  status        ContentPlanningRunStatus @default(PENDING)
+  errorCode     String?
+  createdAt     DateTime                 @default(now())
+  completedAt   DateTime?
+  business      Business                 @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  triggeredBy   User                     @relation("PlanningTriggeredBy", fields: [triggeredById], references: [id], onDelete: Cascade)
+
+  @@index([businessId, createdAt])
+  @@index([triggeredById, createdAt])
+}
+
+model PlatformRule {
+  id                 String                     @id @default(cuid())
+  businessId         String?
+  platform           SocialPlatform
+  contentType        ContentType?
+  category           PlatformRuleCategory
+  ruleKey            String
+  value              Json
+  recommendationType PlatformRecommendationType
+  source             PlatformRuleSource
+  sourceUrl          String?
+  effectiveFrom      DateTime
+  expiresAt          DateTime?
+  reviewedAt         DateTime
+  confidence         Float
+  sectorScope        String[]                   @default([])
+  active             Boolean                    @default(true)
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+  business           Business?                  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([businessId, platform, contentType, ruleKey, effectiveFrom])
+  @@index([platform, active, effectiveFrom])
+  @@index([businessId, platform, active])
+}
+
+model ContentStrategy {
+  id                 String              @id @default(cuid())
+  businessId         String              @unique
+  mode               ContentStrategyMode @default(AINETRA_RECOMMENDED)
+  platformSettings   Json
+  contentMix         Json
+  languages          String[]
+  rationale          String
+  userOverrideFields String[]            @default([])
+  version            Int                 @default(1)
+  approvedAt         DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  business           Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  plans              ContentPlan[]
+}
+
+model ContentPlan {
+  id                 String            @id @default(cuid())
+  businessId         String
+  strategyId         String
+  period             ContentPlanPeriod
+  startDate          DateTime
+  endDate            DateTime
+  timezone           String
+  version            Int               @default(1)
+  status             ContentPlanStatus @default(DRAFT)
+  strategySummary    String
+  strategySnapshot   Json
+  platformStrategies Json
+  contentMix         Json
+  provider           String
+  model              String
+  promptVersion      String
+  inputHash          String
+  approvedAt         DateTime?
+  approvedById       String?
+  supersedesId       String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  business           Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  strategy           ContentStrategy   @relation(fields: [strategyId], references: [id], onDelete: Restrict)
+  approvedBy         User?             @relation("ContentPlanApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  supersedes         ContentPlan?      @relation("ContentPlanSupersession", fields: [supersedesId], references: [id], onDelete: SetNull)
+  supersededBy       ContentPlan[]     @relation("ContentPlanSupersession")
+  items              ContentPlanItem[]
+
+  @@unique([businessId, period, startDate, version])
+  @@index([businessId, period, status, createdAt])
+  @@index([strategyId])
+  @@index([approvedById])
+  @@index([supersedesId])
+}
+
+model ContentPlanItem {
+  id                   String                @id @default(cuid())
+  planId               String
+  goalId               String
+  platform             SocialPlatform
+  contentType          ContentType
+  plannedDate          DateTime
+  recommendedTime      String
+  pillar               String
+  topic                String
+  concept              String
+  hookCategory         String
+  hook                 String
+  captionDirection     String
+  cta                  String
+  language             String
+  mediaRequirement     MediaRequirement
+  mediaAvailability    MediaAvailability
+  mediaAssetId         String?
+  reasoning            String
+  platformRulesApplied Json
+  revision             Int                   @default(1)
+  status               ContentPlanItemStatus @default(ACTIVE)
+  replacesItemId       String?
+  contentItemId        String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  plan                 ContentPlan           @relation(fields: [planId], references: [id], onDelete: Cascade)
+  goal                 BusinessGoal          @relation(fields: [goalId], references: [id], onDelete: Restrict)
+  mediaAsset           MediaAsset?           @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  replacesItem         ContentPlanItem?      @relation("ContentPlanItemReplacement", fields: [replacesItemId], references: [id], onDelete: SetNull)
+  replacementItems     ContentPlanItem[]     @relation("ContentPlanItemReplacement")
+  contentItem          ContentItem?          @relation(fields: [contentItemId], references: [id], onDelete: SetNull)
+
+  @@index([planId, status, plannedDate])
+  @@index([goalId])
+  @@index([mediaAssetId])
+  @@index([replacesItemId])
+  @@index([contentItemId])
 }
 
 model BusinessAnalysisRun {
@@ -226,13 +448,14 @@ model BrandProfile {
 }
 
 model BusinessGoal {
-  id         String        @id @default(cuid())
+  id         String            @id @default(cuid())
   businessId String
   type       String
   priority   GoalPriority
-  createdAt  DateTime      @default(now())
-  business   Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt  DateTime          @default(now())
+  business   Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
   content    ContentItem[]
+  planItems  ContentPlanItem[]
 
   @@unique([businessId, type])
   @@index([businessId, priority])
@@ -254,35 +477,38 @@ model SocialAccount {
 }
 
 model MediaAsset {
-  id               String           @id @default(cuid())
+  id               String            @id @default(cuid())
   businessId       String
-  type             MediaType        @default(IMAGE)
+  type             MediaType         @default(IMAGE)
   originalFilename String
   mimeType         String
   size             Int
   width            Int?
   height           Int?
-  storageKey       String           @unique
-  createdAt        DateTime         @default(now())
-  business         Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  storageKey       String            @unique
+  tags             String[]          @default([])
+  createdAt        DateTime          @default(now())
+  business         Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
   variants         ContentVariant[]
+  planItems        ContentPlanItem[]
 
   @@index([businessId, createdAt])
 }
 
 model ContentItem {
-  id          String           @id @default(cuid())
+  id          String            @id @default(cuid())
   businessId  String
   goalId      String?
   title       String
   topic       String
   contentType ContentType
-  status      ContentStatus    @default(DRAFT)
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  business    Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  goal        BusinessGoal?    @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  status      ContentStatus     @default(DRAFT)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  business    Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  goal        BusinessGoal?     @relation(fields: [goalId], references: [id], onDelete: SetNull)
   variants    ContentVariant[]
+  planItems   ContentPlanItem[]
 
   @@index([businessId, createdAt])
 }

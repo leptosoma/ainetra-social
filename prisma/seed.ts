@@ -10,6 +10,47 @@ const connectionString = process.env.DATABASE_URL;
 if (!connectionString) throw new Error("DATABASE_URL is required");
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 
+const reviewedAt = new Date("2026-09-18T00:00:00.000Z");
+
+const platformRuleSeeds = [
+  { platform: "INSTAGRAM", contentType: "REEL", category: "ASPECT_RATIO", ruleKey: "meta.reels.vertical-9-16", value: { recommended: "9:16", appliesTo: ["INSTAGRAM_REELS", "FACEBOOK_REELS"] }, recommendationType: "BEST_PRACTICE", source: "OFFICIAL_PLATFORM", sourceUrl: "https://www.facebook.com/business/ads/facebook-instagram-reels-ads", confidence: 0.98 },
+  { platform: "INSTAGRAM", contentType: "REEL", category: "SAFE_ZONE", ruleKey: "meta.reels.safe-zone", value: { instruction: "Ana mesajları ve görsel öğeleri Reels güvenli alanında tut." }, recommendationType: "BEST_PRACTICE", source: "OFFICIAL_PLATFORM", sourceUrl: "https://www.facebook.com/business/ads/facebook-instagram-reels-ads", confidence: 0.98 },
+  { platform: "INSTAGRAM", contentType: "REEL", category: "AUDIO", ruleKey: "meta.reels.quality-audio", value: { instruction: "Reels için kaliteli ve içeriğe uygun ses planla." }, recommendationType: "BEST_PRACTICE", source: "OFFICIAL_PLATFORM", sourceUrl: "https://www.facebook.com/business/ads/facebook-instagram-reels-ads", confidence: 0.95 },
+  { platform: "INSTAGRAM", contentType: null, category: "ORIGINALITY", ruleKey: "instagram.rights-owned-or-licensed", value: { instruction: "Yalnız işletmenin ürettiği veya kullanım hakkına sahip olduğu içeriği planla." }, recommendationType: "TECHNICAL_REQUIREMENT", source: "OFFICIAL_PLATFORM", sourceUrl: "https://www.facebook.com/help/354736791367645/", confidence: 1 },
+  { platform: "INSTAGRAM", contentType: "REEL", category: "AUDIO", ruleKey: "instagram.commercial-music-rights", value: { instruction: "Ticari kullanımda lisans durumunu doğrula; uygun olduğunda Meta Sound Collection kullan." }, recommendationType: "TECHNICAL_REQUIREMENT", source: "OFFICIAL_PLATFORM", sourceUrl: "https://www.facebook.com/help/instagram/402084904469945", confidence: 0.98 },
+  { platform: "FACEBOOK", contentType: "REEL", category: "ASPECT_RATIO", ruleKey: "meta.reels.vertical-9-16", value: { recommended: "9:16", appliesTo: ["INSTAGRAM_REELS", "FACEBOOK_REELS"] }, recommendationType: "BEST_PRACTICE", source: "OFFICIAL_PLATFORM", sourceUrl: "https://www.facebook.com/business/ads/facebook-instagram-reels-ads", confidence: 0.98 },
+  { platform: "FACEBOOK", contentType: "REEL", category: "SAFE_ZONE", ruleKey: "meta.reels.safe-zone", value: { instruction: "Ana mesajları ve görsel öğeleri Reels güvenli alanında tut." }, recommendationType: "BEST_PRACTICE", source: "OFFICIAL_PLATFORM", sourceUrl: "https://www.facebook.com/business/ads/facebook-instagram-reels-ads", confidence: 0.98 },
+  { platform: "FACEBOOK", contentType: "REEL", category: "FORMAT", ruleKey: "facebook.reels.flexible-video", value: { supportedOrientations: "ANY", supportedLength: "ANY", note: "Facebook'un 2025 video/Reels değişikliği sonrası destek bilgisi; performans tavsiyesi değildir." }, recommendationType: "TECHNICAL_REQUIREMENT", source: "OFFICIAL_PLATFORM", sourceUrl: "https://www.facebook.com/help/262748009210134/", confidence: 0.95 },
+  { platform: "TIKTOK", contentType: "REEL", category: "ASPECT_RATIO", ruleKey: "tiktok.vertical-9-16", value: { recommended: "9:16", minimumResolution: "720p" }, recommendationType: "BEST_PRACTICE", source: "OFFICIAL_PLATFORM", sourceUrl: "https://ads.tiktok.com/business/en/creative-codes", confidence: 0.98 },
+  { platform: "TIKTOK", contentType: "REEL", category: "SAFE_ZONE", ruleKey: "tiktok.ui-safe-space", value: { instruction: "Ana öğeleri TikTok arayüzünün kapatmadığı güvenli alanda tut." }, recommendationType: "BEST_PRACTICE", source: "OFFICIAL_PLATFORM", sourceUrl: "https://ads.tiktok.com/business/en/creative-codes", confidence: 0.98 },
+  { platform: "TIKTOK", contentType: "REEL", category: "HOOK", ruleKey: "tiktok.hook-body-close", value: { structure: ["HOOK", "BODY", "CLOSE"], instruction: "Açılışta dikkat çek, gövdede mesajı ver, kapanışta net CTA kullan." }, recommendationType: "BEST_PRACTICE", source: "OFFICIAL_PLATFORM", sourceUrl: "https://ads.tiktok.com/business/en/creative-codes", confidence: 0.95 },
+  { platform: "TIKTOK", contentType: "REEL", category: "AUDIO", ruleKey: "tiktok.sound-led", value: { instruction: "İçeriğe uygun müzik, seslendirme veya ses efekti planla." }, recommendationType: "BEST_PRACTICE", source: "OFFICIAL_PLATFORM", sourceUrl: "https://ads.tiktok.com/business/en/creative-codes", confidence: 0.95 },
+  { platform: "TIKTOK", contentType: "REEL", category: "SUBTITLES", ruleKey: "tiktok.captions-context", value: { instruction: "Konuşmalı videoda anlamı destekleyen altyazı veya metin katmanı kullan." }, recommendationType: "GENERAL_RECOMMENDATION", source: "OFFICIAL_PLATFORM", sourceUrl: "https://ads.tiktok.com/business/creativecenter/quicktok/online/5_creative_tips/pc/en", confidence: 0.88 },
+  { platform: "INSTAGRAM", contentType: null, category: "FORMAT", ruleKey: "ainetra.format.planning", value: { contentTypes: ["REEL", "POST", "CAROUSEL", "STORY"], note: "Ainetra planlama kapsamı; yayın API yeteneği değildir." }, recommendationType: "GENERAL_RECOMMENDATION", source: "MANUAL_ADMIN_RULE", sourceUrl: null, confidence: 0.8 },
+  { platform: "FACEBOOK", contentType: null, category: "FORMAT", ruleKey: "ainetra.format.planning", value: { contentTypes: ["POST", "REEL", "CAROUSEL"], note: "Ainetra planlama kapsamı; yayın API yeteneği değildir." }, recommendationType: "GENERAL_RECOMMENDATION", source: "MANUAL_ADMIN_RULE", sourceUrl: null, confidence: 0.8 },
+  { platform: "TIKTOK", contentType: null, category: "FORMAT", ruleKey: "ainetra.format.planning", value: { contentTypes: ["REEL"], note: "Ainetra planlama kapsamı; yayın API yeteneği değildir." }, recommendationType: "GENERAL_RECOMMENDATION", source: "MANUAL_ADMIN_RULE", sourceUrl: null, confidence: 0.8 },
+  { platform: "INSTAGRAM", contentType: null, category: "FREQUENCY", ruleKey: "ainetra.frequency.local-hospitality", value: { minPerWeek: 3, recommendedPerWeek: 4, maxPerWeek: 5, note: "Ainetra başlangıç önerisi; platform kuralı değildir." }, recommendationType: "GENERAL_RECOMMENDATION", source: "MANUAL_ADMIN_RULE", sourceUrl: null, confidence: 0.55 },
+  { platform: "FACEBOOK", contentType: null, category: "FREQUENCY", ruleKey: "ainetra.frequency.local-hospitality", value: { minPerWeek: 2, recommendedPerWeek: 3, maxPerWeek: 4, note: "Ainetra başlangıç önerisi; platform kuralı değildir." }, recommendationType: "GENERAL_RECOMMENDATION", source: "MANUAL_ADMIN_RULE", sourceUrl: null, confidence: 0.55 },
+  { platform: "TIKTOK", contentType: null, category: "FREQUENCY", ruleKey: "ainetra.frequency.local-hospitality", value: { minPerWeek: 2, recommendedPerWeek: 3, maxPerWeek: 4, note: "Ainetra başlangıç önerisi; platform kuralı değildir." }, recommendationType: "GENERAL_RECOMMENDATION", source: "MANUAL_ADMIN_RULE", sourceUrl: null, confidence: 0.5 },
+  { platform: "INSTAGRAM", contentType: null, category: "POSTING_TIME", ruleKey: "ainetra.time.local-hospitality", value: { localTimes: ["12:30", "19:30"], note: "İşletme verisi birikene kadar kullanılan düşük güvenli başlangıç önerisi." }, recommendationType: "GENERAL_RECOMMENDATION", source: "MANUAL_ADMIN_RULE", sourceUrl: null, confidence: 0.4 },
+  { platform: "FACEBOOK", contentType: null, category: "POSTING_TIME", ruleKey: "ainetra.time.local-hospitality", value: { localTimes: ["12:00", "18:30"], note: "İşletme verisi birikene kadar kullanılan düşük güvenli başlangıç önerisi." }, recommendationType: "GENERAL_RECOMMENDATION", source: "MANUAL_ADMIN_RULE", sourceUrl: null, confidence: 0.4 },
+  { platform: "TIKTOK", contentType: null, category: "POSTING_TIME", ruleKey: "ainetra.time.local-hospitality", value: { localTimes: ["18:30", "21:00"], note: "İşletme verisi birikene kadar kullanılan düşük güvenli başlangıç önerisi." }, recommendationType: "GENERAL_RECOMMENDATION", source: "MANUAL_ADMIN_RULE", sourceUrl: null, confidence: 0.4 },
+  { platform: "INSTAGRAM", contentType: null, category: "CONTENT_DIVERSITY", ruleKey: "ainetra.mix.local-hospitality", value: { recommendedMix: { PRODUCT: 25, ATMOSPHERE: 20, PEOPLE: 15, SOCIAL_PROOF: 10, EDUCATIONAL: 10, PROMOTIONAL: 10, BEHIND_THE_SCENES: 10 } }, recommendationType: "GENERAL_RECOMMENDATION", source: "MANUAL_ADMIN_RULE", sourceUrl: null, confidence: 0.55 },
+  { platform: "FACEBOOK", contentType: null, category: "CONTENT_DIVERSITY", ruleKey: "ainetra.mix.local-hospitality", value: { recommendedMix: { PRODUCT: 20, ATMOSPHERE: 15, PEOPLE: 15, SOCIAL_PROOF: 15, EDUCATIONAL: 15, PROMOTIONAL: 10, COMMUNITY: 10 } }, recommendationType: "GENERAL_RECOMMENDATION", source: "MANUAL_ADMIN_RULE", sourceUrl: null, confidence: 0.55 },
+  { platform: "TIKTOK", contentType: null, category: "CONTENT_DIVERSITY", ruleKey: "ainetra.mix.local-hospitality", value: { recommendedMix: { PRODUCT: 20, ATMOSPHERE: 15, PEOPLE: 15, EDUCATIONAL: 15, BEHIND_THE_SCENES: 20, TREND: 10, PROMOTIONAL: 5 } }, recommendationType: "GENERAL_RECOMMENDATION", source: "MANUAL_ADMIN_RULE", sourceUrl: null, confidence: 0.5 },
+] as const;
+
+async function seedPlatformRules() {
+  for (const rule of platformRuleSeeds) {
+    const existing = await prisma.platformRule.findFirst({
+      where: { businessId: null, platform: rule.platform, contentType: rule.contentType, ruleKey: rule.ruleKey, effectiveFrom: reviewedAt },
+    });
+    const data = { ...rule, businessId: null, effectiveFrom: reviewedAt, reviewedAt, sectorScope: rule.source === "OFFICIAL_PLATFORM" ? [] : ["RESTAURANT", "HOTEL", "LOCAL_BUSINESS"], active: true };
+    if (existing) await prisma.platformRule.update({ where: { id: existing.id }, data });
+    else await prisma.platformRule.create({ data });
+  }
+}
+
 async function createDemoImage(storageKey: string, color: string, title: string) {
   const target = path.resolve(process.cwd(), process.env.LOCAL_STORAGE_ROOT ?? ".data/uploads", storageKey);
   await mkdir(path.dirname(target), { recursive: true });
@@ -20,10 +61,19 @@ async function createDemoImage(storageKey: string, color: string, title: string)
 }
 
 async function main() {
+  await seedPlatformRules();
   const email = "owner@mimoza.test";
   const existing = await prisma.user.findUnique({ where: { email }, include: { memberships: true } });
   if (existing?.memberships.length) {
-    console.log("Seed data already exists; no records changed.");
+    const existingBusinessId = existing.memberships[0].businessId;
+    await prisma.mediaAsset.updateMany({ where: { businessId: existingBusinessId, originalFilename: { contains: "steak" } }, data: { tags: ["PHOTO_PRODUCT"] } });
+    await prisma.mediaAsset.updateMany({ where: { businessId: existingBusinessId, originalFilename: { contains: "sunset" } }, data: { tags: ["PHOTO_ATMOSPHERE"] } });
+    const tableAsset = await prisma.mediaAsset.findFirst({ where: { businessId: existingBusinessId, originalFilename: { contains: "table" } } });
+    if (tableAsset) {
+      await prisma.mediaAsset.update({ where: { id: tableAsset.id }, data: { tags: ["PHOTO_ATMOSPHERE"] } });
+      await prisma.contentPlanItem.updateMany({ where: { mediaAssetId: tableAsset.id, mediaRequirement: "PHOTO_PEOPLE" }, data: { mediaAssetId: null, mediaAvailability: "MISSING" } });
+    }
+    console.log("Platform rules and demo media tags refreshed; existing demo records preserved.");
     return;
   }
 
@@ -66,7 +116,8 @@ async function main() {
   const media = [];
   for (const [storageKey, color, title] of mediaInputs) {
     const size = await createDemoImage(`${business.id}/${storageKey}`, color, title);
-    media.push(await prisma.mediaAsset.create({ data: { businessId: business.id, originalFilename: storageKey.split("/").at(-1)!, mimeType: "image/png", size, width: 1200, height: 1500, storageKey: `${business.id}/${storageKey}` } }));
+    const tags = storageKey.includes("steak") ? ["PHOTO_PRODUCT"] : ["PHOTO_ATMOSPHERE"];
+    media.push(await prisma.mediaAsset.create({ data: { businessId: business.id, originalFilename: storageKey.split("/").at(-1)!, mimeType: "image/png", size, width: 1200, height: 1500, storageKey: `${business.id}/${storageKey}`, tags } }));
   }
 
   await prisma.contentItem.create({

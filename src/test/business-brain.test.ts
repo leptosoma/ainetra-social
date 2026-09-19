@@ -175,7 +175,7 @@ describe("Ainetra Business Brain", () => {
     await acceptBusinessAttribute(owner.id, attributes[0].id);
     await acceptBusinessAttribute(owner.id, attributes[1].id);
     await Promise.all(attributes.slice(2).map((attribute) => rejectBusinessAttribute(owner.id, attribute.id)));
-    expect((await buildBusinessContext(owner.id, business.id)).facts).toEqual(["Bilgi 1", "Bilgi 2"]);
+    expect((await buildBusinessContext(owner.id, business.id)).facts.sort()).toEqual(["Bilgi 1", "Bilgi 2"]);
   });
 
   it("continues onboarding when website fetching fails", async () => {

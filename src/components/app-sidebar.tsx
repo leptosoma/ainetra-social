@@ -5,9 +5,11 @@ import { BrandMark } from "./brand-mark";
 const navigation = [
   ["⌂", "Dashboard", "/dashboard"],
   ["✦", "İçerikler", "/content"],
+  ["◫", "İçerik Planı", "/content-plan"],
   ["□", "Takvim", "/calendar"],
   ["▧", "Medya", "/media"],
   ["◇", "Marka", "/brand"],
+  ["◎", "Sosyal Strateji", "/strategy"],
   ["◈", "Business Brain", "/business-brain"],
   ["⚙", "Ayarlar", "/settings"],
 ];

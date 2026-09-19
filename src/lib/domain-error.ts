@@ -6,7 +6,8 @@ export class DomainError extends Error {
       | "FORBIDDEN"
       | "NOT_FOUND"
       | "VALIDATION_ERROR"
-      | "CONFLICT",
+      | "CONFLICT"
+      | "PROVIDER_FAILED",
   ) {
     super(message);
     this.name = "DomainError";

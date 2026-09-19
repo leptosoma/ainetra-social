@@ -11,8 +11,18 @@ const allowedMimeTypes = new Map([
   ["image/webp", "webp"],
 ]);
 
-export async function uploadMedia(userId: string, businessId: string, file: File) {
+export const imagePlanningTags = ["PHOTO_PRODUCT", "PHOTO_ATMOSPHERE", "PHOTO_PEOPLE", "CUSTOM_GRAPHIC"] as const;
+
+function validatePlanningTags(tags: string[]) {
+  if (tags.length > imagePlanningTags.length || new Set(tags).size !== tags.length || tags.some((tag) => !(imagePlanningTags as readonly string[]).includes(tag))) {
+    throw new DomainError("Medya etiketleri geçersiz.", "VALIDATION_ERROR");
+  }
+  return tags;
+}
+
+export async function uploadMedia(userId: string, businessId: string, file: File, rawTags: string[] = []) {
   await requireMembership(userId, businessId);
+  const tags = validatePlanningTags(rawTags);
   const maxBytes = Number(process.env.MAX_UPLOAD_BYTES ?? 8 * 1024 * 1024);
   const extension = allowedMimeTypes.get(file.type);
   if (!extension) {
@@ -50,12 +60,35 @@ export async function uploadMedia(userId: string, businessId: string, file: File
         width: metadata.width,
         height: metadata.height,
         storageKey,
+        tags,
       },
     });
   } catch (error) {
     await storage.delete(storageKey);
     throw error;
   }
+}
+
+export async function updateMediaPlanningTags(userId: string, mediaAssetId: string, rawTags: string[]) {
+  const asset = await prisma.mediaAsset.findUnique({ where: { id: mediaAssetId } });
+  if (!asset) throw new DomainError("Medya bulunamadı.", "NOT_FOUND");
+  await requireMembership(userId, asset.businessId);
+  if (asset.type !== "IMAGE") throw new DomainError("Bu medya türü için görsel etiketi kullanılamaz.", "VALIDATION_ERROR");
+  const tags = validatePlanningTags(rawTags);
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.mediaAsset.update({ where: { id: asset.id }, data: { tags } });
+    await tx.contentPlanItem.updateMany({
+      where: { mediaAssetId: asset.id, mediaRequirement: { notIn: tags as typeof imagePlanningTags[number][] } },
+      data: { mediaAssetId: null, mediaAvailability: "MISSING" },
+    });
+    for (const tag of tags) {
+      await tx.contentPlanItem.updateMany({
+        where: { plan: { businessId: asset.businessId }, mediaAssetId: null, mediaRequirement: tag as typeof imagePlanningTags[number], mediaAvailability: "MISSING", status: "ACTIVE" },
+        data: { mediaAssetId: asset.id, mediaAvailability: "AVAILABLE" },
+      });
+    }
+    return updated;
+  });
 }
 
 export async function deleteMedia(userId: string, mediaAssetId: string) {
@@ -66,6 +99,9 @@ export async function deleteMedia(userId: string, mediaAssetId: string) {
   if (usageCount) {
     throw new DomainError("İçerikte kullanılan medya silinemez.", "CONFLICT");
   }
-  await prisma.mediaAsset.delete({ where: { id: mediaAssetId } });
+  await prisma.$transaction(async (tx) => {
+    await tx.contentPlanItem.updateMany({ where: { mediaAssetId }, data: { mediaAssetId: null, mediaAvailability: "MISSING" } });
+    await tx.mediaAsset.delete({ where: { id: mediaAssetId } });
+  });
   await storage.delete(asset.storageKey);
 }
