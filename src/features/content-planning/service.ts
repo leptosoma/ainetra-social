@@ -5,6 +5,7 @@ import type { Prisma } from "../../../generated/prisma/client";
 import type { ContentPlanPeriod, ContentType, SocialPlatform } from "../../../generated/prisma/enums";
 import { buildBusinessContext } from "@/features/business-brain/service";
 import { getActivePlatformRules, rulesForItem, type ActivePlatformRule } from "@/features/platform-intelligence/service";
+import { invalidateCaptureRequestsForInactiveItems, syncCaptureRequestsForActiveItems } from "@/features/capture-engine/service";
 import { prisma } from "@/lib/db";
 import { DomainError } from "@/lib/domain-error";
 import { requireMembership } from "@/lib/authorization";
@@ -294,9 +295,13 @@ export async function generateContentPlan(userId: string, businessId: string, ra
   assertOutputMatchesInputs(parsed.data, { context, strategy, rules, period, startDate });
   const goals = new Map((await prisma.businessGoal.findMany({ where: { businessId } })).map((goal) => [goal.type, goal]));
   const media = await Promise.all(parsed.data.contentItems.map((item) => mediaForRequirement(businessId, item.mediaRequirement)));
-  const previous = await prisma.contentPlan.findFirst({ where: { businessId, period, startDate }, orderBy: { version: "desc" } });
+  const businessSector = (await prisma.business.findUniqueOrThrow({ where: { id: businessId }, select: { sector: true } })).sector;
   try {
     return await prisma.$transaction(async (tx) => {
+    const previous = await tx.contentPlan.findFirst({ where: { businessId, period, startDate }, orderBy: { version: "desc" }, include: { items: { where: { status: "ACTIVE" }, select: { id: true } } } });
+    if (!options.force && previous?.inputHash === inputHash && (previous.status === "DRAFT" || previous.status === "APPROVED")) {
+      return tx.contentPlan.findUniqueOrThrow({ where: { id: previous.id }, include: { items: { where: { status: "ACTIVE" }, orderBy: [{ plannedDate: "asc" }, { recommendedTime: "asc" }] } } });
+    }
     const plan = await tx.contentPlan.create({
       data: {
         businessId,
@@ -338,7 +343,12 @@ export async function generateContentPlan(userId: string, businessId: string, ra
       reasoning: item.reasoning,
       platformRulesApplied: item.platformRulesApplied,
     })) });
-    if (previous) await tx.contentPlan.update({ where: { id: previous.id }, data: { status: "SUPERSEDED" } });
+    if (previous) {
+      await tx.contentPlan.update({ where: { id: previous.id }, data: { status: "SUPERSEDED" } });
+      await invalidateCaptureRequestsForInactiveItems(tx, previous.items.map((previousItem) => previousItem.id));
+    }
+    const createdItems = await tx.contentPlanItem.findMany({ where: { planId: plan.id, status: "ACTIVE" }, select: { id: true, mediaRequirement: true, mediaAvailability: true, plannedDate: true, contentType: true } });
+    await syncCaptureRequestsForActiveItems(tx, { id: businessId, sector: businessSector, timezone: context.business.timezone }, createdItems);
     return tx.contentPlan.findUniqueOrThrow({ where: { id: plan.id }, include: { items: { where: { status: "ACTIVE" }, orderBy: [{ plannedDate: "asc" }, { recommendedTime: "asc" }] } } });
     }, { isolationLevel: "Serializable" });
   } catch (error) {
@@ -380,7 +390,7 @@ function storedItemToOutput(item: Awaited<ReturnType<typeof prisma.contentPlanIt
 }
 
 export async function regenerateContentPlanItem(userId: string, itemId: string, options: PlanningOptions = {}) {
-  const item = await prisma.contentPlanItem.findUnique({ where: { id: itemId }, include: { plan: { include: { strategy: true } }, goal: true } });
+  const item = await prisma.contentPlanItem.findUnique({ where: { id: itemId }, include: { plan: { include: { strategy: true, business: { select: { sector: true, timezone: true } } } }, goal: true } });
   if (!item || item.status !== "ACTIVE") throw new DomainError("Plan öğesi bulunamadı.", "NOT_FOUND");
   await requireMembership(userId, item.plan.businessId);
   if (item.plan.status === "SUPERSEDED") throw new DomainError("Eski plan sürümündeki öğe yenilenemez.", "CONFLICT");
@@ -412,13 +422,16 @@ export async function regenerateContentPlanItem(userId: string, itemId: string, 
   const media = await mediaForRequirement(item.plan.businessId, next.mediaRequirement);
   return prisma.$transaction(async (tx) => {
     await tx.contentPlanItem.update({ where: { id: item.id }, data: { status: "REPLACED" } });
+    await invalidateCaptureRequestsForInactiveItems(tx, [item.id]);
     await tx.contentPlan.update({ where: { id: item.planId }, data: { status: "DRAFT", approvedAt: null, approvedById: null } });
-    return tx.contentPlanItem.create({ data: {
+    const created = await tx.contentPlanItem.create({ data: {
       planId: item.planId, goalId: goal.id, platform: next.platform, contentType: next.contentType, plannedDate: parseCalendarDate(next.date), recommendedTime: next.recommendedTime,
       pillar: next.pillar, topic: next.topic, concept: next.concept, hookCategory: next.hookCategory, hook: next.hook, captionDirection: next.captionDirection,
       cta: next.cta, language: next.language, mediaRequirement: next.mediaRequirement, ...media, reasoning: next.reasoning,
       platformRulesApplied: next.platformRulesApplied, revision: item.revision + 1, replacesItemId: item.id,
     } });
+    await syncCaptureRequestsForActiveItems(tx, { id: item.plan.businessId, sector: item.plan.business.sector, timezone: item.plan.business.timezone }, [created]);
+    return created;
   }, { isolationLevel: "Serializable" });
   });
 }

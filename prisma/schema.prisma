@@ -173,6 +173,13 @@ enum MediaAvailability {
   NOT_REQUIRED
 }
 
+enum CaptureRequestStatus {
+  OPEN
+  FULFILLED
+  DISMISSED
+  EXPIRED
+}
+
 model User {
   id                          String                @id @default(cuid())
   name                        String
@@ -187,6 +194,7 @@ model User {
   confirmedBusinessAttributes BusinessAttribute[]   @relation("AttributeConfirmedBy")
   approvedContentPlans        ContentPlan[]         @relation("ContentPlanApprovedBy")
   contentPlanningRuns         ContentPlanningRun[]  @relation("PlanningTriggeredBy")
+  dismissedCaptureRequests    CaptureRequest[]      @relation("CaptureRequestDismissedBy")
 }
 
 model Session {
@@ -225,6 +233,8 @@ model Business {
   contentStrategy ContentStrategy?
   contentPlans    ContentPlan[]
   planningRuns    ContentPlanningRun[]
+  captureRequests CaptureRequest[]
+  mediaUsages     MediaUsage[]
 }
 
 model ContentPlanningRun {
@@ -361,6 +371,7 @@ model ContentPlanItem {
   replacesItem         ContentPlanItem?      @relation("ContentPlanItemReplacement", fields: [replacesItemId], references: [id], onDelete: SetNull)
   replacementItems     ContentPlanItem[]     @relation("ContentPlanItemReplacement")
   contentItem          ContentItem?          @relation(fields: [contentItemId], references: [id], onDelete: SetNull)
+  captureRequests      CaptureRequest[]
 
   @@index([planId, status, plannedDate])
   @@index([goalId])
@@ -491,6 +502,8 @@ model MediaAsset {
   business         Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
   variants         ContentVariant[]
   planItems        ContentPlanItem[]
+  captureRequestsFulfilled CaptureRequest[] @relation("CaptureRequestFulfilledBy")
+  usages           MediaUsage[]
 
   @@index([businessId, createdAt])
 }
@@ -532,6 +545,7 @@ model ContentVariant {
   mediaAsset      MediaAsset?     @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
   approvals       Approval[]
   scheduledPosts  ScheduledPost[]
+  mediaUsages     MediaUsage[]
 
   @@unique([contentItemId, platform])
   @@index([mediaAssetId])
@@ -601,4 +615,50 @@ model AIInsight {
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
   @@index([businessId, createdAt])
+}
+
+model CaptureRequest {
+  id                      String               @id @default(cuid())
+  businessId              String
+  contentPlanItemId       String
+  mediaRequirement        MediaRequirement
+  requestedMediaType      MediaType
+  title                   String
+  instructions            String
+  dueAt                   DateTime
+  status                  CaptureRequestStatus @default(OPEN)
+  fulfilledByMediaAssetId String?
+  fulfilledAt             DateTime?
+  dismissedById           String?
+  dismissedAt             DateTime?
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+  business                Business             @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  contentPlanItem         ContentPlanItem      @relation(fields: [contentPlanItemId], references: [id], onDelete: Cascade)
+  fulfilledByMedia        MediaAsset?          @relation("CaptureRequestFulfilledBy", fields: [fulfilledByMediaAssetId], references: [id], onDelete: SetNull)
+  dismissedBy             User?                @relation("CaptureRequestDismissedBy", fields: [dismissedById], references: [id], onDelete: SetNull)
+
+  // Dedup anahtarı: aynı plan öğesi + aynı medya ihtiyacı için tek satır.
+  // Uygulama katmanı FULFILLED->OPEN yeniden açılışını (medya silinirse) yönetir;
+  // DISMISSED/EXPIRED asla otomatik yeniden açılmaz (bkz. capture-engine/service.ts).
+  @@unique([contentPlanItemId, mediaRequirement])
+  @@index([businessId, status, dueAt])
+  @@index([fulfilledByMediaAssetId])
+}
+
+model MediaUsage {
+  id               String         @id @default(cuid())
+  businessId       String
+  mediaAssetId     String
+  contentVariantId String
+  platform         SocialPlatform
+  contentType      ContentType
+  mediaRequirement MediaRequirement
+  usedAt           DateTime       @default(now())
+  business         Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  mediaAsset       MediaAsset     @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+  contentVariant   ContentVariant @relation(fields: [contentVariantId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, mediaAssetId, usedAt])
+  @@index([contentVariantId])
 }

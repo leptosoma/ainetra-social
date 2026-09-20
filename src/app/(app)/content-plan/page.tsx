@@ -7,6 +7,8 @@ import { PageHeader } from "@/components/page-header";
 import { PendingSubmitButton } from "@/components/pending-submit-button";
 import { getCurrentUser } from "@/features/auth/session";
 import { getContentPlanningState } from "@/features/content-planning/service";
+import { listCaptureRequests } from "@/features/capture-engine/service";
+import { CaptureList } from "@/components/capture-list";
 import { getFirstBusinessForUser } from "@/lib/authorization";
 
 const noticeLabels: Record<string, string> = {
@@ -25,7 +27,7 @@ export default async function ContentPlanPage({ searchParams }: { searchParams: 
   if (!user) redirect("/sign-in");
   const business = await getFirstBusinessForUser(user.id);
   if (!business) return <EmptyBusiness />;
-  const [state, params] = await Promise.all([getContentPlanningState(user.id, business.id), searchParams]);
+  const [state, captureRequests, params] = await Promise.all([getContentPlanningState(user.id, business.id), listCaptureRequests(user.id, business.id), searchParams]);
   const selected = state.plans.find((plan) => plan.id === params.plan) ?? state.plans.find((plan) => plan.status !== "SUPERSEDED") ?? state.plans[0];
   const overlappingPlan = selected ? state.plans.find((plan) => plan.id !== selected.id && plan.status !== "SUPERSEDED" && plan.period !== selected.period && plan.startDate <= selected.endDate && plan.endDate >= selected.startDate) : null;
   const today = new Intl.DateTimeFormat("sv-SE", { timeZone: business.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -34,6 +36,8 @@ export default async function ContentPlanPage({ searchParams }: { searchParams: 
       <PageHeader eyebrow="Sosyal medya planlaması" title="İçerik planı" description="İş hedeflerinize bağlı 7 günlük uygulama planı veya 30 günlük stratejik görünüm oluşturun." />
       {params.notice && noticeLabels[params.notice] && <div className="brain-notice success" role="status">{noticeLabels[params.notice]}</div>}
       {!state.strategy?.approvedAt && <section className="brain-notice warning"><strong>Önce sosyal stratejiyi onaylayın.</strong> <Link href="/strategy">Strateji ekranına git →</Link></section>}
+
+      <CaptureList requests={captureRequests} />
 
       <section className="plan-command panel">
         <div><span className="eyebrow dark">Yeni plan</span><h2>Plan dönemini seçin</h2><p>Mevcut aynı plan varsa gereksiz sağlayıcı çağrısı yapılmaz.</p></div>

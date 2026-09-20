@@ -5,7 +5,9 @@ import { getFirstBusinessForUser } from "@/lib/authorization";
 import { prisma } from "@/lib/db";
 import { deriveWorkflowLabel } from "@/features/content/service";
 import { EmptyBusiness } from "@/components/empty-business";
+import { CaptureList } from "@/components/capture-list";
 import { calculateBusinessBrainCompleteness, getBusinessBrainState } from "@/features/business-brain/service";
+import { listCaptureRequests } from "@/features/capture-engine/service";
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
@@ -13,9 +15,10 @@ export default async function DashboardPage() {
   const business = await getFirstBusinessForUser(user.id);
   if (!business) return <><div className="topbar"><span>Production workspace</span></div><EmptyBusiness /></>;
 
-  const [variants, brainState] = await Promise.all([
+  const [variants, brainState, captureRequests] = await Promise.all([
     prisma.contentVariant.findMany({ where: { contentItem: { businessId: business.id } }, include: { approvals: true, scheduledPosts: true } }),
     getBusinessBrainState(user.id, business.id),
+    listCaptureRequests(user.id, business.id),
   ]);
   const brain = calculateBusinessBrainCompleteness(brainState);
   const awaitingConfirmation = brainState.attributes.filter((item) => item.verificationStatus === "INFERRED" || item.verificationStatus === "NEEDS_CONFIRMATION").length;
@@ -39,6 +42,7 @@ export default async function DashboardPage() {
         <div><span className="eyebrow">Ainetra Business Brain</span><h2>{brain.percent === 100 ? "İşletme hafızası hazır." : "Ainetra'nın işletmenizi daha iyi tanımasını sağlayın."}</h2><p>{awaitingConfirmation ? `${awaitingConfirmation} bilgi onayınızı bekliyor.` : brain.missing.length ? `Eksik: ${brain.missing.join(", ")}` : "Onaylanmış bilgiler güvenilir bağlam olarak hazır."}</p></div>
         <strong>{brain.percent}%<small> tamamlandı</small></strong>
       </Link>
+      <CaptureList requests={captureRequests} variant="compact" />
       <section className="metrics-grid">
         <article><span className="metric-icon cream">✎</span><div><small>Taslak</small><strong>{counts.draft}</strong><p>Üzerinde çalışılacak</p></div></article>
         <article><span className="metric-icon gold">✓</span><div><small>Onaylı</small><strong>{counts.approved}</strong><p>Planlamaya hazır</p></div></article>
