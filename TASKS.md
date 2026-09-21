@@ -12,12 +12,9 @@ Phase 4 — Capture + Content Stock + Fallback
 - P4-01 Capture Request foundation.
 - P4-01B duplicate/concurrency correction.
 - P4-02 MediaUsage.
+- P4-03 Content Stock.
 
 ## Ready
-
-### P4-03 — Content Stock
-
-Depends on P4-02. Use MediaAsset, MediaUsage, and upcoming plan requirements to calculate deterministic, explainable `HEALTHY` / `LOW` / `CRITICAL` status, covered/upcoming counts, missing requirements, a tenant-isolated dashboard summary, and tests.
 
 ### P4-04 — Content Fallback Engine
 
@@ -29,6 +26,7 @@ Depends on P4-02, P4-03, and P4-04. Validate Plan → Media Requirement → Stoc
 
 ## Backlog
 
+- Review whether Content Stock's deterministic greedy allocation should use optimal matching for complex multi-tag inventories; current logic can conservatively undercount coverage but never overcounts it.
 - Phase 5 Visual Intelligence.
 - Phase 6 Publishing.
 - Phase 7 Analytics + Learning.
