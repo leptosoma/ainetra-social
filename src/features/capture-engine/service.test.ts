@@ -9,19 +9,22 @@ import {
 } from "@/features/capture-engine/service";
 import { updateMediaPlanningTags } from "@/features/media/service";
 
-async function businessFixture() {
+async function businessFixture(options: { timezone?: string } = {}) {
   const owner = await prisma.user.create({ data: { name: "Owner", email: `capture-owner-${crypto.randomUUID()}@test.dev`, passwordHash: "hash" } });
   const outsider = await prisma.user.create({ data: { name: "Outsider", email: `capture-out-${crypto.randomUUID()}@test.dev`, passwordHash: "hash" } });
   const business = await prisma.business.create({
     data: {
-      name: "Mimoza", sector: "RESTAURANT", timezone: "Europe/Istanbul",
+      name: "Mimoza", sector: "RESTAURANT", timezone: options.timezone ?? "Europe/Istanbul",
       memberships: { create: { userId: owner.id, role: "OWNER" } },
       goals: { create: [{ type: "RESERVATIONS", priority: "PRIMARY" }] },
     },
     include: { goals: true },
   });
-  const otherBusiness = await prisma.business.create({ data: { name: "Other", sector: "HOTEL", memberships: { create: { userId: outsider.id, role: "OWNER" } } } });
-  return { owner, outsider, business, otherBusiness, goalId: business.goals[0].id };
+  const otherBusiness = await prisma.business.create({
+    data: { name: "Other", sector: "HOTEL", timezone: "Europe/Istanbul", memberships: { create: { userId: outsider.id, role: "OWNER" } }, goals: { create: [{ type: "RESERVATIONS", priority: "PRIMARY" }] } },
+    include: { goals: true },
+  });
+  return { owner, outsider, business, otherBusiness, goalId: business.goals[0].id, otherGoalId: otherBusiness.goals[0].id };
 }
 
 async function planItemFixture(
@@ -229,5 +232,146 @@ describe("Ainetra Phase 4 capture engine", () => {
     await dismissCaptureRequest(owner.id, request.id);
     const after = await listCaptureRequests(owner.id, business.id);
     expect(after.some((candidate) => candidate.id === request.id)).toBe(false);
+  });
+
+  // ---- P4-05: listCaptureRequests reconciliation + business-local expiry ----
+  // Fixture plan window: 2026-10-05..2026-10-11; default item plannedDate 2026-10-09.
+  const inWindow = new Date("2026-10-07T12:00:00.000Z");
+
+  it("backfills a CaptureRequest for a current ACTIVE MISSING item that was never synced", async () => {
+    const { business, owner, goalId } = await businessFixture();
+    const { item } = await planItemFixture(business.id, goalId, { mediaRequirement: "PHOTO_PRODUCT" });
+    expect(await prisma.captureRequest.count({ where: { contentPlanItemId: item.id } })).toBe(0);
+    const listed = await listCaptureRequests(owner.id, business.id, { now: inWindow });
+    expect(listed.map((request) => request.contentPlanItemId)).toEqual([item.id]);
+    expect(listed[0].status).toBe("OPEN");
+    expect(listed[0].mediaRequirement).toBe("PHOTO_PRODUCT");
+    expect(listed[0].requestedMediaType).toBe("IMAGE");
+    expect(listed[0].dueAt.toISOString()).toBe(item.plannedDate.toISOString());
+  });
+
+  it("does not backfill for NO_NEW_MEDIA_REQUIRED or non-MISSING items", async () => {
+    const { business, owner, goalId } = await businessFixture();
+    const { item: notRequired } = await planItemFixture(business.id, goalId, { mediaRequirement: "NO_NEW_MEDIA_REQUIRED", mediaAvailability: "NOT_REQUIRED" });
+    const { item: available } = await planItemFixture(business.id, goalId, { mediaAvailability: "AVAILABLE" });
+    const listed = await listCaptureRequests(owner.id, business.id, { now: inWindow, scope: "ALL" });
+    expect(listed).toHaveLength(0);
+    expect(await prisma.captureRequest.count({ where: { contentPlanItemId: { in: [notRequired.id, available.id] } } })).toBe(0);
+  });
+
+  it("creates no duplicates under repeated and concurrent reconciliation", async () => {
+    const { business, owner, goalId } = await businessFixture();
+    const { item: first } = await planItemFixture(business.id, goalId, { mediaRequirement: "PHOTO_PRODUCT" });
+    const { item: second } = await planItemFixture(business.id, goalId, { mediaRequirement: "VIDEO_VERTICAL" });
+    await listCaptureRequests(owner.id, business.id, { now: inWindow });
+    await listCaptureRequests(owner.id, business.id, { now: inWindow });
+    const results = await Promise.allSettled([
+      listCaptureRequests(owner.id, business.id, { now: inWindow }),
+      listCaptureRequests(owner.id, business.id, { now: inWindow }),
+      listCaptureRequests(owner.id, business.id, { now: inWindow }),
+    ]);
+    expect(results.every((result) => result.status === "fulfilled")).toBe(true);
+    expect(await prisma.captureRequest.count({ where: { contentPlanItemId: first.id } })).toBe(1);
+    expect(await prisma.captureRequest.count({ where: { contentPlanItemId: second.id } })).toBe(1);
+    expect(await prisma.captureRequest.count({ where: { businessId: business.id } })).toBe(2);
+  });
+
+  it("creates no duplicates when concurrent lists reconcile the same unsynced item from a cold table", async () => {
+    const { business, owner, goalId } = await businessFixture();
+    const { item } = await planItemFixture(business.id, goalId);
+    const results = await Promise.allSettled([
+      listCaptureRequests(owner.id, business.id, { now: inWindow }),
+      listCaptureRequests(owner.id, business.id, { now: inWindow }),
+    ]);
+    expect(results.every((result) => result.status === "fulfilled")).toBe(true);
+    expect(await prisma.captureRequest.count({ where: { contentPlanItemId: item.id } })).toBe(1);
+  });
+
+  it("keeps DISMISSED and EXPIRED requests terminal across reconciliation", async () => {
+    const { business, owner, goalId } = await businessFixture();
+    const { item: dismissedItem } = await planItemFixture(business.id, goalId, { mediaRequirement: "PHOTO_PEOPLE" });
+    const { item: expiredItem } = await planItemFixture(business.id, goalId, { mediaRequirement: "PHOTO_PRODUCT", plannedDate: new Date("2026-10-06T00:00:00.000Z") });
+    const first = await listCaptureRequests(owner.id, business.id, { now: inWindow, scope: "ALL" });
+    const dismissTarget = first.find((request) => request.contentPlanItemId === dismissedItem.id)!;
+    await dismissCaptureRequest(owner.id, dismissTarget.id);
+    // expiredItem was due 2026-10-06, before the business-local "today" (2026-10-07) -> EXPIRED on first list.
+    const expiredRequest = await prisma.captureRequest.findFirstOrThrow({ where: { contentPlanItemId: expiredItem.id } });
+    expect(expiredRequest.status).toBe("EXPIRED");
+
+    const second = await listCaptureRequests(owner.id, business.id, { now: inWindow, scope: "ALL" });
+    expect(second).toHaveLength(0);
+    expect((await prisma.captureRequest.findUniqueOrThrow({ where: { id: dismissTarget.id } })).status).toBe("DISMISSED");
+    expect((await prisma.captureRequest.findUniqueOrThrow({ where: { id: expiredRequest.id } })).status).toBe("EXPIRED");
+    expect(await prisma.captureRequest.count({ where: { businessId: business.id } })).toBe(2);
+  });
+
+  it("closes and hides OPEN requests whose item was REPLACED or whose plan was SUPERSEDED", async () => {
+    const { business, owner, goalId } = await businessFixture();
+    const { item: replacedItem } = await planItemFixture(business.id, goalId, { mediaRequirement: "PHOTO_PEOPLE" });
+    const { plan: oldPlan, item: supersededItem } = await planItemFixture(business.id, goalId, { mediaRequirement: "PHOTO_PRODUCT" });
+    const { item: currentItem } = await planItemFixture(business.id, goalId, { mediaRequirement: "VIDEO_VERTICAL" });
+    await runSync(asBusiness(business), [replacedItem, supersededItem, currentItem]);
+    // Simulate stale state without the invalidation hook having run.
+    await prisma.contentPlanItem.update({ where: { id: replacedItem.id }, data: { status: "REPLACED" } });
+    await prisma.contentPlan.update({ where: { id: oldPlan.id }, data: { status: "SUPERSEDED" } });
+
+    const listed = await listCaptureRequests(owner.id, business.id, { now: inWindow, scope: "ALL" });
+    expect(listed.map((request) => request.contentPlanItemId)).toEqual([currentItem.id]);
+    const stale = await prisma.captureRequest.findMany({ where: { contentPlanItemId: { in: [replacedItem.id, supersededItem.id] } } });
+    expect(stale).toHaveLength(2);
+    for (const request of stale) {
+      expect(request.status).toBe("DISMISSED");
+      expect(request.dismissedById).toBeNull();
+      expect(request.dismissedAt).not.toBeNull();
+    }
+    expect(await prisma.captureRequest.count({ where: { businessId: business.id } })).toBe(3);
+  });
+
+  it("keeps a request due today open all business-local day and expires only prior business days", async () => {
+    const { business, owner, goalId } = await businessFixture({ timezone: "Europe/Istanbul" });
+    const { item: dueToday } = await planItemFixture(business.id, goalId, { mediaRequirement: "PHOTO_PRODUCT", plannedDate: new Date("2026-10-09T00:00:00.000Z") });
+    const { item: dueYesterday } = await planItemFixture(business.id, goalId, { mediaRequirement: "PHOTO_PEOPLE", plannedDate: new Date("2026-10-08T00:00:00.000Z") });
+    // 2026-10-09 05:00Z = 08:00 Istanbul on the due day; the UTC-midnight dueAt is already in the past as a timestamp.
+    const morning = new Date("2026-10-09T05:00:00.000Z");
+    const listed = await listCaptureRequests(owner.id, business.id, { now: morning, scope: "TODAY" });
+    expect(listed.map((request) => request.contentPlanItemId)).toEqual([dueToday.id]);
+    expect((await prisma.captureRequest.findFirstOrThrow({ where: { contentPlanItemId: dueYesterday.id } })).status).toBe("EXPIRED");
+
+    // 2026-10-09 20:59Z = 23:59 Istanbul: still the due day -> still open.
+    const lateEvening = new Date("2026-10-09T20:59:00.000Z");
+    expect((await listCaptureRequests(owner.id, business.id, { now: lateEvening, scope: "TODAY" })).map((request) => request.contentPlanItemId)).toEqual([dueToday.id]);
+
+    // 2026-10-09 21:00Z = 00:00 Istanbul on 2026-10-10: due day has ended -> expired.
+    const nextLocalDay = new Date("2026-10-09T21:00:00.000Z");
+    expect(await listCaptureRequests(owner.id, business.id, { now: nextLocalDay, scope: "ALL" })).toHaveLength(0);
+    expect((await prisma.captureRequest.findFirstOrThrow({ where: { contentPlanItemId: dueToday.id } })).status).toBe("EXPIRED");
+  });
+
+  it("uses the business timezone (not UTC) for the day boundary in a negative-offset timezone", async () => {
+    const { business, owner, goalId } = await businessFixture({ timezone: "America/Los_Angeles" });
+    const { item } = await planItemFixture(business.id, goalId, { mediaRequirement: "PHOTO_PRODUCT", plannedDate: new Date("2026-10-08T00:00:00.000Z") });
+    // 2026-10-09 03:00Z is already Oct 9 in UTC but still Oct 8 20:00 in Los Angeles -> due today, stays open.
+    const stillDueDayLocally = new Date("2026-10-09T03:00:00.000Z");
+    const listed = await listCaptureRequests(owner.id, business.id, { now: stillDueDayLocally, scope: "TODAY" });
+    expect(listed.map((request) => request.contentPlanItemId)).toEqual([item.id]);
+    // 2026-10-09 07:00Z = Oct 9 00:00 in Los Angeles -> prior business day, expires.
+    const nextLocalDay = new Date("2026-10-09T07:00:00.000Z");
+    expect(await listCaptureRequests(owner.id, business.id, { now: nextLocalDay, scope: "ALL" })).toHaveLength(0);
+    expect((await prisma.captureRequest.findFirstOrThrow({ where: { contentPlanItemId: item.id } })).status).toBe("EXPIRED");
+  });
+
+  it("reconciles only the requesting tenant's plan items", async () => {
+    const { business, owner, outsider, otherBusiness, goalId, otherGoalId } = await businessFixture();
+    const { item: ownItem } = await planItemFixture(business.id, goalId);
+    const { item: foreignItem } = await planItemFixture(otherBusiness.id, otherGoalId);
+    const listed = await listCaptureRequests(owner.id, business.id, { now: inWindow, scope: "ALL" });
+    expect(listed.map((request) => request.contentPlanItemId)).toEqual([ownItem.id]);
+    expect(listed.every((request) => request.businessId === business.id)).toBe(true);
+    expect(await prisma.captureRequest.count({ where: { contentPlanItemId: foreignItem.id } })).toBe(0);
+    expect(await prisma.captureRequest.count({ where: { businessId: otherBusiness.id } })).toBe(0);
+    await expect(listCaptureRequests(outsider.id, business.id, { now: inWindow })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    const foreignListed = await listCaptureRequests(outsider.id, otherBusiness.id, { now: inWindow, scope: "ALL" });
+    expect(foreignListed.map((request) => request.contentPlanItemId)).toEqual([foreignItem.id]);
+    expect(await prisma.captureRequest.count({ where: { businessId: business.id } })).toBe(1);
   });
 });

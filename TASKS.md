@@ -2,7 +2,7 @@
 
 ## Active phase
 
-Phase 4 — Capture + Content Stock + Fallback
+Phase 4 complete — no active implementation task. Phase 5 requires explicit approval.
 
 ## Done
 
@@ -14,12 +14,11 @@ Phase 4 — Capture + Content Stock + Fallback
 - P4-02 MediaUsage.
 - P4-03 Content Stock.
 - P4-04 Content Fallback Engine.
+- P4-05 Phase 4 Integration Review.
 
 ## Ready
 
-### P4-05 — Phase 4 Integration Review
-
-Depends on P4-02, P4-03, and P4-04. Validate Plan → Media Requirement → Stock → Capture Request → Fallback, stale-version handling, tenancy, claims safety, concurrency, full tests, lint, build, audit, and documentation.
+None. Phase 5 has not started and requires explicit approval.
 
 ## Backlog
 

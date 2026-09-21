@@ -3,9 +3,11 @@
 Updated: 2026-09-21
 
 - Branch: `feature/capture-fallback`
-- Verified product baseline: `f9bdf34` (`phase-4a-capture`)
-- Validation: 121/121 Vitest tests pass; lint and production build pass; npm audit reports 0 vulnerabilities.
-- Note: Windows Application Control blocks Prisma's schema-engine executable in this environment. The P4-02 migration was applied to the test database from its checked-in SQL for validation, then the full test suite ran directly against `.env.test`.
+- Verified product baseline: `phase-4-complete`.
+- Validation: 131/131 Vitest tests pass; lint and production build pass; npm audit reports 0 vulnerabilities.
+- Development database: all 8 migrations applied; `prisma migrate status` reports that the schema is up to date.
+- Live Phase 4 validation: Content Stock reports 3/43 for the current 30-day window; 43 current active requirements are counted and 6 superseded-plan items are excluded.
+- Capture reconciliation: all 39 current ACTIVE/MISSING requirements have one CaptureRequest; 34 are open, 5 are expired, with no duplicates or invalid open rows.
 
 ## Migrations
 
@@ -27,14 +29,13 @@ Updated: 2026-09-21
 - MediaUsage recording at the export lifecycle boundary, tenant-safe/idempotent usage summaries, never-used detection, last-used time, and usage count.
 - Content Stock calculation from upcoming active plan requirements, MediaAsset suitability, and MediaUsage recency; tenant-isolated `HEALTHY` / `LOW` / `CRITICAL` dashboard summary with explainable coverage and missing requirements.
 - Content Fallback proposals with authentic-media ranking, MediaUsage recency protection, confirmed canonical Business Brain facts, explicit user acceptance, plan/version validation, tenant isolation, and concurrency-safe idempotency.
+- CaptureRequest reconciliation for pre-Phase-4 plans, business-timezone expiry boundaries, stale request closure, duplicate-safe concurrent sync, and atomic fulfilment when media is assigned.
 
 ## Incomplete modules and debt
 
 - Verified social proof has no production data source yet, so the fallback engine safely skips that rank rather than inventing evidence.
-- Capture-request expiry and date ranges need a future focused review for business-timezone day boundaries.
-- Media retagging/reopen and dismiss-versus-fulfil concurrency deserve explicit regression coverage during P4-05.
-- Content Stock uses deterministic greedy allocation and can conservatively undercount in complex multi-tag inventories; review optimal matching during P4-05 if product data shows a need.
+- Content Stock uses deterministic greedy allocation and can conservatively undercount in complex multi-tag inventories; review optimal matching before scale if product data shows a need.
 
 ## Next task
 
-P4-05 Phase 4 Integration Review. P4-04 was implemented by repository-aware Claude Code and validated by Codex. Do not begin P4-05 without explicit instruction.
+Phase 4 is complete. The next recommended phase is Phase 5 Visual Intelligence, which requires explicit user approval and has not started.

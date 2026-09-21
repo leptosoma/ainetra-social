@@ -12,15 +12,12 @@ Website analysis, attribute ledger, provenance, confirmation, canonical context,
 
 Platform rules and strategy, content mix and pillars, 7/30-day plans, media requirements, plan versioning, and plan approval.
 
-## Phase 4 — Active: Capture + Stock + Fallback
+## Phase 4 — Completed: Capture + Stock + Fallback
 
 Completed:
 
 - P4-01 Capture Requests and Capture foundation.
 - P4-01B duplicate/concurrency correction.
-
-Remaining:
-
 - P4-02 MediaUsage.
 - P4-03 Content Stock.
 - P4-04 Content Fallback Engine.

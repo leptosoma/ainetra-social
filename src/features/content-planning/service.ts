@@ -5,7 +5,7 @@ import type { Prisma } from "../../../generated/prisma/client";
 import type { ContentPlanPeriod, ContentType, SocialPlatform } from "../../../generated/prisma/enums";
 import { buildBusinessContext } from "@/features/business-brain/service";
 import { getActivePlatformRules, rulesForItem, type ActivePlatformRule } from "@/features/platform-intelligence/service";
-import { invalidateCaptureRequestsForInactiveItems, syncCaptureRequestsForActiveItems } from "@/features/capture-engine/service";
+import { fulfillCaptureRequestsForItems, invalidateCaptureRequestsForInactiveItems, syncCaptureRequestsForActiveItems } from "@/features/capture-engine/service";
 import { prisma } from "@/lib/db";
 import { DomainError } from "@/lib/domain-error";
 import { requireMembership } from "@/lib/authorization";
@@ -445,7 +445,11 @@ export async function assignPlanItemMedia(userId: string, itemId: string, mediaA
   if (!asset || asset.businessId !== item.plan.businessId) throw new DomainError("Medya bu işletmeye ait değil.", "FORBIDDEN");
   if (item.mediaRequirement === "NO_NEW_MEDIA_REQUIRED") throw new DomainError("Bu öğe için yeni medya gerekmiyor.", "VALIDATION_ERROR");
   if (!asset.tags.includes(item.mediaRequirement)) throw new DomainError("Medya bu plan öğesinin gereksinimiyle eşleşmiyor.", "VALIDATION_ERROR");
-  return prisma.contentPlanItem.update({ where: { id: item.id }, data: { mediaAssetId: asset.id, mediaAvailability: "AVAILABLE" } });
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.contentPlanItem.update({ where: { id: item.id }, data: { mediaAssetId: asset.id, mediaAvailability: "AVAILABLE" } });
+    await fulfillCaptureRequestsForItems(tx, [item.id], asset.id);
+    return updated;
+  }, { isolationLevel: "Serializable" });
 }
 
 export async function getContentPlanningState(userId: string, businessId: string) {

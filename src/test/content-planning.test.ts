@@ -107,6 +107,21 @@ describe("Ainetra Phase 3 content planning", () => {
     await expect(assignPlanItemMedia(owner.id, plan.items[0].id, media.id)).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
+  it("fulfils the open capture request when media is assigned to a plan item", async () => {
+    const { owner, business, plan } = await planFixture();
+    const item = plan.items.find((candidate) => candidate.mediaRequirement !== "NO_NEW_MEDIA_REQUIRED" && candidate.mediaAvailability === "MISSING")!;
+    const open = await prisma.captureRequest.findUniqueOrThrow({ where: { contentPlanItemId_mediaRequirement: { contentPlanItemId: item.id, mediaRequirement: item.mediaRequirement } } });
+    expect(open.status).toBe("OPEN");
+    const media = await prisma.mediaAsset.create({ data: { businessId: business.id, type: item.mediaRequirement.startsWith("VIDEO") ? "VIDEO" : "IMAGE", originalFilename: "own.jpg", mimeType: "image/jpeg", size: 10, storageKey: `own/${crypto.randomUUID()}.jpg`, tags: [item.mediaRequirement] } });
+    const updated = await assignPlanItemMedia(owner.id, item.id, media.id);
+    expect(updated.mediaAvailability).toBe("AVAILABLE");
+    expect(updated.mediaAssetId).toBe(media.id);
+    const request = await prisma.captureRequest.findUniqueOrThrow({ where: { id: open.id } });
+    expect(request.status).toBe("FULFILLED");
+    expect(request.fulfilledByMediaAssetId).toBe(media.id);
+    expect(request.fulfilledAt).not.toBeNull();
+  });
+
   it("requires content mix to total 100", async () => {
     const { owner, business } = await fixture();
     await expect(saveCustomizedContentStrategy(owner.id, business.id, { mode: "CUSTOM", platformSettings: [{ platform: "INSTAGRAM", enabled: true, weeklyFrequency: 2, contentTypes: ["POST"] }], contentMix: [{ pillar: "PRODUCT", percentage: 40 }, { pillar: "ATMOSPHERE", percentage: 40 }], languages: ["tr"] })).rejects.toBeTruthy();
