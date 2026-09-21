@@ -8,12 +8,16 @@ import { PendingSubmitButton } from "@/components/pending-submit-button";
 import { getCurrentUser } from "@/features/auth/session";
 import { getContentPlanningState } from "@/features/content-planning/service";
 import { listCaptureRequests } from "@/features/capture-engine/service";
+import { listContentFallbackProposals } from "@/features/content-fallback/service";
 import { CaptureList } from "@/components/capture-list";
+import { FallbackProposal } from "@/components/fallback-proposal";
 import { getFirstBusinessForUser } from "@/lib/authorization";
 
 const noticeLabels: Record<string, string> = {
   "plan-ready": "Plan hazırlandı.", "plan-approved": "Plan onaylandı. Yayın onayı ayrıca verilecektir.",
   "plan-regenerated": "Yeni plan sürümü oluşturuldu; strateji tercihleriniz korundu.", "item-regenerated": "Plan öğesi yenilendi; plan tekrar taslak durumuna alındı.",
+  "fallback-proposed": "Yedek önerisi hazır. Plan, siz kabul edene kadar değişmez.", "fallback-none": "Bu öğe için uygun bir yedek bulunamadı; çekim görevi açık kalıyor.",
+  "fallback-accepted": "Yedek önerisi uygulandı.",
 };
 
 const planStatusLabels = { DRAFT: "Taslak", APPROVED: "Onaylı", SUPERSEDED: "Önceki sürüm" } as const;
@@ -31,6 +35,8 @@ export default async function ContentPlanPage({ searchParams }: { searchParams: 
   const selected = state.plans.find((plan) => plan.id === params.plan) ?? state.plans.find((plan) => plan.status !== "SUPERSEDED") ?? state.plans[0];
   const overlappingPlan = selected ? state.plans.find((plan) => plan.id !== selected.id && plan.status !== "SUPERSEDED" && plan.period !== selected.period && plan.startDate <= selected.endDate && plan.endDate >= selected.startDate) : null;
   const today = new Intl.DateTimeFormat("sv-SE", { timeZone: business.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  const todayUtc = new Date(`${today}T00:00:00.000Z`);
+  const fallbackProposals = selected && selected.status !== "SUPERSEDED" ? await listContentFallbackProposals(user.id, selected.id) : new Map();
   return (
     <>
       <PageHeader eyebrow="Sosyal medya planlaması" title="İçerik planı" description="İş hedeflerinize bağlı 7 günlük uygulama planı veya 30 günlük stratejik görünüm oluşturun." />
@@ -63,7 +69,7 @@ export default async function ContentPlanPage({ searchParams }: { searchParams: 
           return <Fragment key={item.id}>{selected.period === "THIRTY_DAYS" && week !== previousWeek && <h3 className="plan-week-heading">{week + 1}. hafta</h3>}<article className="plan-item panel">
           <div className="plan-date"><strong>{item.plannedDate.toLocaleDateString("tr-TR", { day: "2-digit", month: "short" })}</strong><span>{item.recommendedTime}</span></div>
           <div className="plan-copy"><div className="plan-badges"><span>{item.platform === "INSTAGRAM" ? "Instagram" : item.platform === "FACEBOOK" ? "Facebook" : "TikTok"}</span><span>{contentTypeLabels[item.contentType]}</span><span>{pillarLabels[item.pillar] ?? item.pillar}</span><span>{goalLabels[item.goal.type] ?? item.goal.type}</span></div><h3>{item.topic}</h3><p>{item.concept}</p><div className="plan-detail"><b>Açılış fikri</b><span>{item.hook}</span><b>Metin yönü</b><span>{item.captionDirection} <i>Bu son paylaşım metni değildir.</i></span><b>Harekete çağrı</b><span>{item.cta}</span><b>Neden?</b><span>{item.reasoning}</span></div></div>
-          <aside className="media-callout"><span className={item.mediaAvailability === "MISSING" ? "missing" : "available"}>{item.mediaAvailability === "MISSING" ? "Medya gerekli" : item.mediaAvailability === "AVAILABLE" ? "Medya hazır" : "Yeni medya gerekmiyor"}</span><strong>{mediaLabels[item.mediaRequirement] ?? item.mediaRequirement}</strong>{item.mediaAsset && <small>{item.mediaAsset.originalFilename}</small>}<details><summary>Dikkate alınan kurallar</summary><ul>{Array.isArray(item.platformRulesApplied) && item.platformRulesApplied.map((rule) => <li key={String(rule)}>{String(rule)}</li>)}</ul></details>{selected.status !== "SUPERSEDED" && <form action={regenerateContentPlanItemAction}><input type="hidden" name="planId" value={selected.id} /><input type="hidden" name="itemId" value={item.id} /><PendingSubmitButton idle="Bu öğeyi yenile" pending="Yenileniyor…" className="mini-button" /></form>}</aside>
+          <aside className="media-callout"><span className={item.mediaAvailability === "MISSING" ? "missing" : "available"}>{item.mediaAvailability === "MISSING" ? "Medya gerekli" : item.mediaAvailability === "AVAILABLE" ? "Medya hazır" : "Yeni medya gerekmiyor"}</span><strong>{mediaLabels[item.mediaRequirement] ?? item.mediaRequirement}</strong>{item.mediaAsset && <small>{item.mediaAsset.originalFilename}</small>}<details><summary>Dikkate alınan kurallar</summary><ul>{Array.isArray(item.platformRulesApplied) && item.platformRulesApplied.map((rule) => <li key={String(rule)}>{String(rule)}</li>)}</ul></details>{selected.status !== "SUPERSEDED" && item.mediaAvailability === "MISSING" && item.plannedDate >= todayUtc && <FallbackProposal planId={selected.id} itemId={item.id} proposal={fallbackProposals.get(item.id)} />}{selected.status !== "SUPERSEDED" && <form action={regenerateContentPlanItemAction}><input type="hidden" name="planId" value={selected.id} /><input type="hidden" name="itemId" value={item.id} /><PendingSubmitButton idle="Bu öğeyi yenile" pending="Yenileniyor…" className="mini-button" /></form>}</aside>
         </article></Fragment>;
         })}</div>
         <section className="approval-separation"><strong>Plan onayı yayın izni değildir.</strong><p>Bu onay yalnızca stratejik takvimi sabitler. İçerik varyantı, son metin ve yayın zamanı Phase 1 onay akışından ayrıca geçer.</p></section>

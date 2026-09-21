@@ -187,21 +187,40 @@ enum MediaUsageType {
   EXPORTED
 }
 
+// Fallback önerisinin türü; sıralama product-bible "Content Fallback" listesiyle aynıdır.
+// Bunlar kural tabanlı, deterministik önerilerdir; yapay zeka üretimi değildir.
+enum ContentFallbackKind {
+  UNUSED_AUTHENTIC_MEDIA
+  OLDER_UNUSED_AUTHENTIC_MEDIA
+  REUSABLE_AUTHENTIC_MEDIA
+  FORMAT_ADAPTATION
+  CONFIRMED_BUSINESS_INFO
+  VERIFIED_SOCIAL_PROOF
+  BRAND_CREATIVE_PLACEHOLDER
+}
+
+enum ContentFallbackProposalStatus {
+  PROPOSED
+  ACCEPTED
+  INVALIDATED
+}
+
 model User {
-  id                          String                @id @default(cuid())
+  id                          String                    @id @default(cuid())
   name                        String
-  email                       String                @unique
+  email                       String                    @unique
   passwordHash                String
-  createdAt                   DateTime              @default(now())
-  updatedAt                   DateTime              @updatedAt
+  createdAt                   DateTime                  @default(now())
+  updatedAt                   DateTime                  @updatedAt
   memberships                 Membership[]
   sessions                    Session[]
   approvals                   Approval[]
-  analysisRuns                BusinessAnalysisRun[] @relation("AnalysisTriggeredBy")
-  confirmedBusinessAttributes BusinessAttribute[]   @relation("AttributeConfirmedBy")
-  approvedContentPlans        ContentPlan[]         @relation("ContentPlanApprovedBy")
-  contentPlanningRuns         ContentPlanningRun[]  @relation("PlanningTriggeredBy")
-  dismissedCaptureRequests    CaptureRequest[]      @relation("CaptureRequestDismissedBy")
+  analysisRuns                BusinessAnalysisRun[]     @relation("AnalysisTriggeredBy")
+  confirmedBusinessAttributes BusinessAttribute[]       @relation("AttributeConfirmedBy")
+  approvedContentPlans        ContentPlan[]             @relation("ContentPlanApprovedBy")
+  contentPlanningRuns         ContentPlanningRun[]      @relation("PlanningTriggeredBy")
+  dismissedCaptureRequests    CaptureRequest[]          @relation("CaptureRequestDismissedBy")
+  acceptedFallbackProposals   ContentFallbackProposal[] @relation("FallbackProposalAcceptedBy")
 }
 
 model Session {
@@ -217,31 +236,32 @@ model Session {
 }
 
 model Business {
-  id              String                @id @default(cuid())
-  name            String
-  sector          String
-  location        String?
-  website         String?
-  instagramHandle String?
-  timezone        String                @default("Europe/Istanbul")
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
-  memberships     Membership[]
-  brandProfile    BrandProfile?
-  goals           BusinessGoal[]
-  socialAccounts  SocialAccount[]
-  mediaAssets     MediaAsset[]
-  contentItems    ContentItem[]
-  scheduledPosts  ScheduledPost[]
-  aiInsights      AIInsight[]
-  analysisRuns    BusinessAnalysisRun[]
-  attributes      BusinessAttribute[]
-  platformRules   PlatformRule[]
-  contentStrategy ContentStrategy?
-  contentPlans    ContentPlan[]
-  planningRuns    ContentPlanningRun[]
-  captureRequests CaptureRequest[]
-  mediaUsages     MediaUsage[]
+  id                String                    @id @default(cuid())
+  name              String
+  sector            String
+  location          String?
+  website           String?
+  instagramHandle   String?
+  timezone          String                    @default("Europe/Istanbul")
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  memberships       Membership[]
+  brandProfile      BrandProfile?
+  goals             BusinessGoal[]
+  socialAccounts    SocialAccount[]
+  mediaAssets       MediaAsset[]
+  contentItems      ContentItem[]
+  scheduledPosts    ScheduledPost[]
+  aiInsights        AIInsight[]
+  analysisRuns      BusinessAnalysisRun[]
+  attributes        BusinessAttribute[]
+  platformRules     PlatformRule[]
+  contentStrategy   ContentStrategy?
+  contentPlans      ContentPlan[]
+  planningRuns      ContentPlanningRun[]
+  captureRequests   CaptureRequest[]
+  mediaUsages       MediaUsage[]
+  fallbackProposals ContentFallbackProposal[]
 }
 
 model ContentPlanningRun {
@@ -309,15 +329,15 @@ model ContentStrategy {
 }
 
 model ContentPlan {
-  id                 String            @id @default(cuid())
+  id                 String                    @id @default(cuid())
   businessId         String
   strategyId         String
   period             ContentPlanPeriod
   startDate          DateTime
   endDate            DateTime
   timezone           String
-  version            Int               @default(1)
-  status             ContentPlanStatus @default(DRAFT)
+  version            Int                       @default(1)
+  status             ContentPlanStatus         @default(DRAFT)
   strategySummary    String
   strategySnapshot   Json
   platformStrategies Json
@@ -329,14 +349,15 @@ model ContentPlan {
   approvedAt         DateTime?
   approvedById       String?
   supersedesId       String?
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
-  business           Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  strategy           ContentStrategy   @relation(fields: [strategyId], references: [id], onDelete: Restrict)
-  approvedBy         User?             @relation("ContentPlanApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
-  supersedes         ContentPlan?      @relation("ContentPlanSupersession", fields: [supersedesId], references: [id], onDelete: SetNull)
-  supersededBy       ContentPlan[]     @relation("ContentPlanSupersession")
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  business           Business                  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  strategy           ContentStrategy           @relation(fields: [strategyId], references: [id], onDelete: Restrict)
+  approvedBy         User?                     @relation("ContentPlanApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  supersedes         ContentPlan?              @relation("ContentPlanSupersession", fields: [supersedesId], references: [id], onDelete: SetNull)
+  supersededBy       ContentPlan[]             @relation("ContentPlanSupersession")
   items              ContentPlanItem[]
+  fallbackProposals  ContentFallbackProposal[]
 
   @@unique([businessId, period, startDate, version])
   @@index([businessId, period, status, createdAt])
@@ -346,7 +367,7 @@ model ContentPlan {
 }
 
 model ContentPlanItem {
-  id                   String                @id @default(cuid())
+  id                   String                    @id @default(cuid())
   planId               String
   goalId               String
   platform             SocialPlatform
@@ -366,19 +387,20 @@ model ContentPlanItem {
   mediaAssetId         String?
   reasoning            String
   platformRulesApplied Json
-  revision             Int                   @default(1)
-  status               ContentPlanItemStatus @default(ACTIVE)
+  revision             Int                       @default(1)
+  status               ContentPlanItemStatus     @default(ACTIVE)
   replacesItemId       String?
   contentItemId        String?
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
-  plan                 ContentPlan           @relation(fields: [planId], references: [id], onDelete: Cascade)
-  goal                 BusinessGoal          @relation(fields: [goalId], references: [id], onDelete: Restrict)
-  mediaAsset           MediaAsset?           @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
-  replacesItem         ContentPlanItem?      @relation("ContentPlanItemReplacement", fields: [replacesItemId], references: [id], onDelete: SetNull)
-  replacementItems     ContentPlanItem[]     @relation("ContentPlanItemReplacement")
-  contentItem          ContentItem?          @relation(fields: [contentItemId], references: [id], onDelete: SetNull)
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
+  plan                 ContentPlan               @relation(fields: [planId], references: [id], onDelete: Cascade)
+  goal                 BusinessGoal              @relation(fields: [goalId], references: [id], onDelete: Restrict)
+  mediaAsset           MediaAsset?               @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  replacesItem         ContentPlanItem?          @relation("ContentPlanItemReplacement", fields: [replacesItemId], references: [id], onDelete: SetNull)
+  replacementItems     ContentPlanItem[]         @relation("ContentPlanItemReplacement")
+  contentItem          ContentItem?              @relation(fields: [contentItemId], references: [id], onDelete: SetNull)
   captureRequests      CaptureRequest[]
+  fallbackProposals    ContentFallbackProposal[]
 
   @@index([planId, status, plannedDate])
   @@index([goalId])
@@ -495,22 +517,23 @@ model SocialAccount {
 }
 
 model MediaAsset {
-  id               String            @id @default(cuid())
-  businessId       String
-  type             MediaType         @default(IMAGE)
-  originalFilename String
-  mimeType         String
-  size             Int
-  width            Int?
-  height           Int?
-  storageKey       String            @unique
-  tags             String[]          @default([])
-  createdAt        DateTime          @default(now())
-  business         Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  variants         ContentVariant[]
-  planItems        ContentPlanItem[]
-  captureRequestsFulfilled CaptureRequest[] @relation("CaptureRequestFulfilledBy")
-  usages           MediaUsage[]
+  id                       String                    @id @default(cuid())
+  businessId               String
+  type                     MediaType                 @default(IMAGE)
+  originalFilename         String
+  mimeType                 String
+  size                     Int
+  width                    Int?
+  height                   Int?
+  storageKey               String                    @unique
+  tags                     String[]                  @default([])
+  createdAt                DateTime                  @default(now())
+  business                 Business                  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  variants                 ContentVariant[]
+  planItems                ContentPlanItem[]
+  captureRequestsFulfilled CaptureRequest[]          @relation("CaptureRequestFulfilledBy")
+  usages                   MediaUsage[]
+  fallbackProposals        ContentFallbackProposal[]
 
   @@index([businessId, createdAt])
 }
@@ -672,4 +695,39 @@ model MediaUsage {
   @@unique([contentVariantId, mediaAssetId, usageType])
   @@index([businessId, mediaAssetId, usedAt])
   @@index([contentVariantId])
+}
+
+// P4-04 Content Fallback: medyası eksik bir plan öğesi için üretilen, kullanıcı KABUL EDENE
+// kadar planı değiştirmeyen öneri. Öneri; hangi plan sürümü ve öğe revizyonu için üretildiğini
+// taşır; kabul anında bu bilgiler yeniden doğrulanır (bkz. content-fallback/service.ts).
+model ContentFallbackProposal {
+  id                     String                        @id @default(cuid())
+  businessId             String
+  planId                 String
+  planVersion            Int
+  contentPlanItemId      String
+  itemRevision           Int
+  kind                   ContentFallbackKind
+  mediaAssetId           String?
+  targetMediaRequirement MediaRequirement
+  rationale              String
+  sources                Json
+  fingerprint            String
+  status                 ContentFallbackProposalStatus @default(PROPOSED)
+  acceptedAt             DateTime?
+  acceptedById           String?
+  invalidatedAt          DateTime?
+  createdAt              DateTime                      @default(now())
+  updatedAt              DateTime                      @updatedAt
+  business               Business                      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  plan                   ContentPlan                   @relation(fields: [planId], references: [id], onDelete: Cascade)
+  contentPlanItem        ContentPlanItem               @relation(fields: [contentPlanItemId], references: [id], onDelete: Cascade)
+  mediaAsset             MediaAsset?                   @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  acceptedBy             User?                         @relation("FallbackProposalAcceptedBy", fields: [acceptedById], references: [id], onDelete: SetNull)
+
+  @@index([contentPlanItemId, status])
+  @@index([businessId, status, createdAt])
+  @@index([planId])
+  @@index([mediaAssetId])
+  @@index([acceptedById])
 }

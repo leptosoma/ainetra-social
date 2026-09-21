@@ -13,12 +13,9 @@ Phase 4 — Capture + Content Stock + Fallback
 - P4-01B duplicate/concurrency correction.
 - P4-02 MediaUsage.
 - P4-03 Content Stock.
+- P4-04 Content Fallback Engine.
 
 ## Ready
-
-### P4-04 — Content Fallback Engine
-
-Depends on P4-02 and P4-03. Prioritize unused authentic media, older unused/reusable media, recency-protected reuse, format adaptation, confirmed business information, verified social proof, brand creative placeholder, then no fallback. Never invent business claims. Require user acceptance; remain plan-version safe, concurrency safe, and tenant isolated; provide a concise rationale and tests.
 
 ### P4-05 — Phase 4 Integration Review
 
