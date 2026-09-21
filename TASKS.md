@@ -11,14 +11,9 @@ Phase 4 — Capture + Content Stock + Fallback
 - Phase 3 Platform Intelligence + Content Planning.
 - P4-01 Capture Request foundation.
 - P4-01B duplicate/concurrency correction.
+- P4-02 MediaUsage.
 
 ## Ready
-
-### P4-02 — MediaUsage
-
-Goal: track where and when MediaAssets are actually used.
-
-Acceptance: business isolation; MediaAsset and content/plan relation; platform, usage type, and `usedAt`; duplicate protection; concurrency safety; never-used detection; last-used calculation; usage count; tests. Do not implement Content Stock except for an unavoidable tiny helper.
 
 ### P4-03 — Content Stock
 

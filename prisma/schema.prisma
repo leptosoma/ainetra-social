@@ -180,6 +180,13 @@ enum CaptureRequestStatus {
   EXPIRED
 }
 
+// Gerçek kullanımın hangi yaşam döngüsü sınırında kaydedildiğini söyler.
+// EXPORTED = kullanıcı içeriği dışa aktarımını kaydetti; bu YAYINLANDI anlamına gelmez.
+// Yayınlama (Phase 6) geldiğinde kendi değerini ekler.
+enum MediaUsageType {
+  EXPORTED
+}
+
 model User {
   id                          String                @id @default(cuid())
   name                        String
@@ -647,18 +654,22 @@ model CaptureRequest {
 }
 
 model MediaUsage {
-  id               String         @id @default(cuid())
+  id               String            @id @default(cuid())
   businessId       String
   mediaAssetId     String
   contentVariantId String
   platform         SocialPlatform
   contentType      ContentType
-  mediaRequirement MediaRequirement
-  usedAt           DateTime       @default(now())
-  business         Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  mediaAsset       MediaAsset     @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
-  contentVariant   ContentVariant @relation(fields: [contentVariantId], references: [id], onDelete: Cascade)
+  usageType        MediaUsageType
+  mediaRequirement MediaRequirement?
+  usedAt           DateTime          @default(now())
+  business         Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  mediaAsset       MediaAsset        @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+  contentVariant   ContentVariant    @relation(fields: [contentVariantId], references: [id], onDelete: Cascade)
 
+  // Mantıksal kullanım anahtarı: aynı varyantta aynı medyanın aynı türde kullanımı tek satırdır.
+  // Eşzamanlı kayıt denemeleri ON CONFLICT DO NOTHING ile tek satıra düşer (bkz. media-usage/service.ts).
+  @@unique([contentVariantId, mediaAssetId, usageType])
   @@index([businessId, mediaAssetId, usedAt])
   @@index([contentVariantId])
 }

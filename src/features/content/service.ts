@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { requireMembership } from "@/lib/authorization";
 import { DomainError } from "@/lib/domain-error";
 import { contentInputSchema, variantUpdateSchema } from "./schemas";
+import { recordMediaUsage } from "@/features/media-usage/service";
 
 async function assertMediaBelongsToBusiness(mediaAssetId: string | null | undefined, businessId: string) {
   if (!mediaAssetId) return;
@@ -89,10 +90,22 @@ export async function recordContentExport(userId: string, variantId: string) {
     include: { contentItem: true },
   });
   if (!variant) throw new DomainError("İçerik varyantı bulunamadı.", "NOT_FOUND");
-  await requireMembership(userId, variant.contentItem.businessId);
-  return prisma.contentVariant.update({
-    where: { id: variantId },
-    data: { exportedAt: new Date(), exportedVersion: variant.version },
+  const businessId = variant.contentItem.businessId;
+  await requireMembership(userId, businessId);
+  const now = new Date();
+  // Dışa aktarım, yayınlama gelene kadar medyanın gerçekten kullanıldığı tek yaşam döngüsü
+  // sınırıdır; kullanım EXPORTED olarak kaydedilir (yayınlandı anlamına gelmez).
+  // Varsayılan izolasyon bilinçli: ON CONFLICT DO NOTHING eşzamanlı dışa aktarımları
+  // serialization hatası üretmeden tek mantıksal kullanıma indirger.
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.contentVariant.update({
+      where: { id: variantId },
+      data: { exportedAt: now, exportedVersion: variant.version },
+    });
+    if (updated.mediaAssetId) {
+      await recordMediaUsage(tx, { businessId, mediaAssetId: updated.mediaAssetId, contentVariantId: updated.id, usageType: "EXPORTED", usedAt: now });
+    }
+    return updated;
   });
 }
 
