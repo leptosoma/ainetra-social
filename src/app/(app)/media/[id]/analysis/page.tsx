@@ -24,6 +24,8 @@ import {
   statusLabels,
 } from "@/features/visual-analysis/labels";
 import { getMediaAnalysisDetail } from "@/features/visual-analysis/service";
+import { SafeEnhanceReview } from "@/components/safe-enhance-review";
+import { getSafeEnhanceReview } from "@/features/safe-enhance/service";
 import { DomainError } from "@/lib/domain-error";
 
 const noticeLabels: Record<string, { text: string; tone: "success" | "warning" }> = {
@@ -32,6 +34,15 @@ const noticeLabels: Record<string, { text: string; tone: "success" | "warning" }
   "analysis-invalid": { text: "Analiz sonucu doğrulanamadı ve kaydedilmedi; önceki güncel sonuç korundu.", tone: "warning" },
   "analysis-rejected": { text: "Bu medya için analiz çalıştırılamadı (yalnızca fotoğraflar desteklenir, saatlik sınır olabilir).", tone: "warning" },
   "analysis-error": { text: "Analiz başlatılamadı.", tone: "warning" },
+  "enhance-ready": { text: "İyileştirilmiş sürüm hazır; aşağıdan karşılaştırıp saklayabilir veya atabilirsiniz.", tone: "success" },
+  "enhance-pending": { text: "Bu ön ayar için zaten süren bir iyileştirme var; yeni bir iş başlatılmadı.", tone: "warning" },
+  "enhance-failed": { text: "İyileştirme tamamlanamadı; orijinal görsel olduğu gibi duruyor.", tone: "warning" },
+  "enhance-invalid": { text: "İyileştirme çıktısı doğrulanamadı ve kaydedilmedi; orijinal görsel olduğu gibi duruyor.", tone: "warning" },
+  "enhance-rejected": { text: "Bu medya için güvenli iyileştirme çalıştırılamadı (yalnızca yüklenen fotoğraflar desteklenir, saatlik sınır olabilir).", tone: "warning" },
+  "enhance-kept": { text: "İyileştirilmiş sürüm kütüphaneye ayrı bir görsel olarak eklendi; orijinal korundu.", tone: "success" },
+  "enhance-discarded": { text: "İyileştirilmiş sürüm atıldı; orijinal görsel olduğu gibi duruyor.", tone: "success" },
+  "enhance-decided": { text: "Bu iyileştirme için karar zaten verilmişti.", tone: "warning" },
+  "enhance-error": { text: "Güvenli iyileştirme işlemi tamamlanamadı.", tone: "warning" },
 };
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR", { dateStyle: "medium", timeStyle: "short" });
@@ -41,8 +52,9 @@ export default async function MediaAnalysisPage({ params, searchParams }: { para
   if (!user) redirect("/sign-in");
   const [{ id }, query] = await Promise.all([params, searchParams]);
   let detail: Awaited<ReturnType<typeof getMediaAnalysisDetail>>;
+  let enhanceReview: Awaited<ReturnType<typeof getSafeEnhanceReview>>;
   try {
-    detail = await getMediaAnalysisDetail(user.id, id);
+    [detail, enhanceReview] = await Promise.all([getMediaAnalysisDetail(user.id, id), getSafeEnhanceReview(user.id, id)]);
   } catch (error) {
     if (error instanceof DomainError && (error.code === "NOT_FOUND" || error.code === "FORBIDDEN")) notFound();
     throw error;
@@ -123,6 +135,7 @@ export default async function MediaAnalysisPage({ params, searchParams }: { para
           ) : (
             <div className="empty-state wide"><h3>Bu görsel için güncel bir analiz yok.</h3><p>{summary.latestFailure ? errorCodeLabels[summary.latestFailure.errorCode ?? ""] ?? "Son deneme tamamlanamadı." : "Analiz başlatarak kategori, kalite ve platform uyumu bilgisi alın."}</p></div>
           )}
+          <SafeEnhanceReview review={enhanceReview} />
           {current && summary.latestFailure && <div className="alert warning">Sürüm {summary.latestFailure.version} denemesi tamamlanamadı ({errorCodeLabels[summary.latestFailure.errorCode ?? ""] ?? "bilinmeyen hata"}); sürüm {current.version} güncel kalmaya devam ediyor.</div>}
           {history.length > 0 && (
             <div className="panel">

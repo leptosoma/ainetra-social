@@ -16,18 +16,15 @@ Phase 5 — Visual Intelligence
 - P4-04 Content Fallback Engine.
 - P4-05 Phase 4 Integration Review.
 - P5-01 Visual Analysis Foundation.
+- P5-02 Safe Enhance.
 
 ## Ready
-
-### P5-02 — Safe Enhance
-
-Authenticity-preserving lighting, color, crop, perspective, noise, sharpness, and minor cleanup transformations with user review.
-
-## Queued — not ready
 
 ### P5-03 — Brand Style
 
 Apply BrandProfile visual character while preserving the real subject and factual product/service appearance.
+
+## Queued — not ready
 
 ### P5-04 — Social Variants + Creative Campaign
 
@@ -40,7 +37,9 @@ Validate Upload → Analyze → Recommend → Safe Enhance / Brand Style → Pla
 ## Backlog
 
 - Review whether Content Stock's deterministic greedy allocation should use optimal matching for complex multi-tag inventories; current logic can conservatively undercount coverage but never overcounts it.
-- Add timeout/recovery handling for abandoned `PENDING` visual-analysis attempts before an asynchronous production provider is introduced.
+- Add timeout/recovery handling for abandoned `PENDING` visual-analysis and Safe Enhance attempts before asynchronous production providers are introduced.
+- Phase 5.5 — Simple Experience & Calendar Workspace. Future only: day/week/month/year calendar, action-first status language, simplified dashboard/navigation, and an “Ainetra yardım et” flow over the existing engines.
+- Ainetra product family architecture — future only: Social, Sales, Serve, Control, and a deliberately small shared Core extracted only from proven cross-product needs.
 - Ainetra Intent Engine — future shared capability for public social intent signals in Ainetra Social and accepted lead/pipeline opportunities in Ainetra Sales. Documentation only; no Phase 5 implementation.
 - Phase 6 Publishing.
 - Phase 7 Analytics + Learning.

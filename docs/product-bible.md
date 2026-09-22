@@ -6,6 +6,10 @@ Ainetra Social is an AI-powered social media manager for small and medium busine
 
 The MVP serves restaurants, cafes, and bars. The core domain must later support hotels, beauty businesses, clinics, real estate, retail, and other sectors without embedding sector-specific rules in shared domain logic.
 
+## Product experience principle
+
+**Complex engine, simple surface.** Ainetra may become more sophisticated internally while its interface becomes simpler. Each screen should make the user's next natural action obvious and translate internal concepts into human language. Prefer “Bu içerik için bir fotoğraf gerekiyor” over `MISSING_MEDIA`; customers should not need to understand Content Stock, Fallback Engine, Capture Engine, Business Brain, or provider internals to act.
+
 ## Core loop
 
 Business Brain → Goals → Platform Intelligence → Content Planning → Content Capture → Content Stock → Fallback → Visual Intelligence → Approval → Publishing → Analytics → Learning → improved planning.
@@ -66,3 +70,12 @@ Visual analysis is media metadata and context. It never becomes canonical Busine
 ## Future shared capability — Ainetra Intent Engine
 
 The future Ainetra Intent Engine may serve Ainetra Social by detecting public social intent signals and Ainetra Sales by turning user-accepted opportunities into leads and pipeline. This is a future architecture note only. Phase 5 does not implement Intent Engine, Sales, or Lead Radar behavior.
+
+## Future Ainetra product family
+
+- **Ainetra Social:** social planning, content, media, publishing, and social growth.
+- **Ainetra Sales:** prospects, leads, opportunities, pipeline, follow-up, and AI-assisted sales workflows.
+- **Ainetra Serve:** a separate restaurant operations and guest-service product for QR/NFC menus, table and guest workflows, assisted upsell, service requests, and future POS integrations. Serve is not fundamentally a Sales module or a Social lead-capture module.
+- **Ainetra Control:** the internal control plane for tenants, businesses, packages, feature activation, AI providers and usage, quotas, entitlements, and platform administration.
+
+A future Ainetra Core may contain only proven shared capabilities such as tenant/organization, identity, membership and roles, appropriate business knowledge, AI provider usage, entitlements, audit, and shared integration contracts. Do not merge current codebases or extract a shared Core prematurely. Complete Social first, develop Sales afterward, and extract common components only when real cross-product requirements exist.

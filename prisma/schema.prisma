@@ -236,6 +236,35 @@ enum VisualCategory {
   UNKNOWN
 }
 
+enum MediaAssetOrigin {
+  UPLOAD
+  SAFE_ENHANCE
+}
+
+enum MediaEnhancementPreset {
+  NATURAL
+  BRIGHT
+  CLEAN
+  WARM
+}
+
+enum MediaEnhancementStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  INVALID_OUTPUT
+}
+
+enum MediaEnhancementDecision {
+  KEPT
+  DISCARDED
+}
+
+enum MediaEnhancementProvenance {
+  REAL
+  DEVELOPMENT
+}
+
 model User {
   id                          String                    @id @default(cuid())
   name                        String
@@ -253,6 +282,8 @@ model User {
   dismissedCaptureRequests    CaptureRequest[]          @relation("CaptureRequestDismissedBy")
   acceptedFallbackProposals   ContentFallbackProposal[] @relation("FallbackProposalAcceptedBy")
   triggeredMediaAnalyses      MediaAnalysis[]           @relation("MediaAnalysisTriggeredBy")
+  triggeredMediaEnhancements  MediaEnhancement[]        @relation("MediaEnhancementTriggeredBy")
+  decidedMediaEnhancements    MediaEnhancement[]        @relation("MediaEnhancementDecidedBy")
 }
 
 model Session {
@@ -295,6 +326,7 @@ model Business {
   mediaUsages       MediaUsage[]
   fallbackProposals ContentFallbackProposal[]
   mediaAnalyses     MediaAnalysis[]
+  mediaEnhancements MediaEnhancement[]
 }
 
 model ContentPlanningRun {
@@ -563,17 +595,26 @@ model MediaAsset {
   // Tek ve belirsizliğe yer bırakmayan "güncel analiz" işaretçisi: yalnızca SUCCEEDED bir
   // MediaAnalysis'i gösterir; başarısız/geçersiz denemeler bu alana asla yazılmaz.
   currentAnalysisId        String?                   @unique
+  // P5-02: kaynağı UPLOAD olan satır kullanıcının yüklediği orijinaldir ve değiştirilmez. SAFE_ENHANCE
+  // satırı, kullanıcının "Sakla" dediği bir iyileştirme çıktısıdır; derivedFromId kaynağı gösterir.
+  origin                   MediaAssetOrigin          @default(UPLOAD)
+  derivedFromId            String?
   createdAt                DateTime                  @default(now())
   business                 Business                  @relation(fields: [businessId], references: [id], onDelete: Cascade)
   currentAnalysis          MediaAnalysis?            @relation("MediaAssetCurrentAnalysis", fields: [currentAnalysisId], references: [id], onDelete: SetNull)
+  derivedFrom              MediaAsset?               @relation("MediaAssetDerivedFrom", fields: [derivedFromId], references: [id], onDelete: SetNull)
+  derivatives              MediaAsset[]              @relation("MediaAssetDerivedFrom")
   variants                 ContentVariant[]
   planItems                ContentPlanItem[]
   captureRequestsFulfilled CaptureRequest[]          @relation("CaptureRequestFulfilledBy")
   usages                   MediaUsage[]
   fallbackProposals        ContentFallbackProposal[]
   analyses                 MediaAnalysis[]           @relation("MediaAnalysisAsset")
+  enhancements             MediaEnhancement[]        @relation("MediaEnhancementSource")
+  enhancementOutputOf      MediaEnhancement?         @relation("MediaEnhancementOutput")
 
   @@index([businessId, createdAt])
+  @@index([derivedFromId])
 }
 
 // Her analiz denemesi (mediaAssetId, version) ile sürümlenir. Güncel analiz MediaAsset.currentAnalysisId
@@ -601,10 +642,58 @@ model MediaAnalysis {
   mediaAsset      MediaAsset              @relation("MediaAnalysisAsset", fields: [mediaAssetId], references: [id], onDelete: Cascade)
   currentFor      MediaAsset?             @relation("MediaAssetCurrentAnalysis")
   triggeredBy     User?                   @relation("MediaAnalysisTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
+  enhancements    MediaEnhancement[]      @relation("MediaEnhancementSourceAnalysis")
 
   @@unique([mediaAssetId, version])
   @@index([businessId, createdAt])
   @@index([triggeredById])
+}
+
+// P5-02 Safe Enhance: her deneme (sourceAssetId, version) ile sürümlenir; kaynak MediaAsset satırı ve
+// baytları asla değişmez. Başarılı çıktı ayrı bir depolama anahtarında saklanır (outputStorageKey) ve
+// yalnızca kullanıcı "Sakla" dediğinde ayrı bir MediaAsset (outputAssetId, origin SAFE_ENHANCE) olur.
+// operations: sağlayıcıya verilen, şemayla sınırlandırılmış piksel düzeyi ayarlar (ham yük saklanmaz).
+// Aynı kaynak+ön ayar için aynı anda yalnızca bir PENDING deneme olabilir (serviste Serializable denetim).
+model MediaEnhancement {
+  id                    String                     @id @default(cuid())
+  businessId            String
+  sourceAssetId         String
+  version               Int
+  preset                MediaEnhancementPreset
+  status                MediaEnhancementStatus     @default(PENDING)
+  decision              MediaEnhancementDecision?
+  provider              String
+  model                 String
+  provenance            MediaEnhancementProvenance
+  parameterVersion      String
+  operations            Json?
+  authenticitySensitive Boolean                    @default(true)
+  sourceAnalysisId      String?
+  outputStorageKey      String?                    @unique
+  outputMimeType        String?
+  outputSize            Int?
+  outputWidth           Int?
+  outputHeight          Int?
+  outputAssetId         String?                    @unique
+  errorCode             String?
+  triggeredById         String?
+  decidedById           String?
+  decidedAt             DateTime?
+  completedAt           DateTime?
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+  business              Business                   @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  sourceAsset           MediaAsset                 @relation("MediaEnhancementSource", fields: [sourceAssetId], references: [id], onDelete: Cascade)
+  outputAsset           MediaAsset?                @relation("MediaEnhancementOutput", fields: [outputAssetId], references: [id], onDelete: SetNull)
+  sourceAnalysis        MediaAnalysis?             @relation("MediaEnhancementSourceAnalysis", fields: [sourceAnalysisId], references: [id], onDelete: SetNull)
+  triggeredBy           User?                      @relation("MediaEnhancementTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
+  decidedBy             User?                      @relation("MediaEnhancementDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@unique([sourceAssetId, version])
+  @@index([businessId, createdAt])
+  @@index([sourceAssetId, preset, status])
+  @@index([triggeredById])
+  @@index([decidedById])
 }
 
 model ContentItem {
