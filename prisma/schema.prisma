@@ -205,6 +205,37 @@ enum ContentFallbackProposalStatus {
   INVALIDATED
 }
 
+// P5-01 Görsel Analiz: bir MediaAsset için sürümlü analiz kayıtları. Analiz yalnızca medya
+// meta verisidir; BusinessAttribute/BrandProfile/hedef gibi kanonik Business Brain durumunu
+// asla değiştirmez. Gerçek sağlayıcı (REAL) ile geliştirme sağlayıcısı (DEVELOPMENT) ayrımı
+// kayıt düzeyinde tutulur ve kullanıcıya görünür.
+enum MediaAnalysisStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  INVALID_OUTPUT
+}
+
+enum MediaAnalysisProvenance {
+  REAL
+  DEVELOPMENT
+}
+
+enum VisualCategory {
+  FOOD
+  DRINK
+  INTERIOR
+  EXTERIOR
+  PEOPLE
+  TEAM
+  PRODUCT
+  SERVICE
+  EVENT
+  GRAPHIC
+  OTHER
+  UNKNOWN
+}
+
 model User {
   id                          String                    @id @default(cuid())
   name                        String
@@ -221,6 +252,7 @@ model User {
   contentPlanningRuns         ContentPlanningRun[]      @relation("PlanningTriggeredBy")
   dismissedCaptureRequests    CaptureRequest[]          @relation("CaptureRequestDismissedBy")
   acceptedFallbackProposals   ContentFallbackProposal[] @relation("FallbackProposalAcceptedBy")
+  triggeredMediaAnalyses      MediaAnalysis[]           @relation("MediaAnalysisTriggeredBy")
 }
 
 model Session {
@@ -262,6 +294,7 @@ model Business {
   captureRequests   CaptureRequest[]
   mediaUsages       MediaUsage[]
   fallbackProposals ContentFallbackProposal[]
+  mediaAnalyses     MediaAnalysis[]
 }
 
 model ContentPlanningRun {
@@ -527,15 +560,51 @@ model MediaAsset {
   height                   Int?
   storageKey               String                    @unique
   tags                     String[]                  @default([])
+  // Tek ve belirsizliğe yer bırakmayan "güncel analiz" işaretçisi: yalnızca SUCCEEDED bir
+  // MediaAnalysis'i gösterir; başarısız/geçersiz denemeler bu alana asla yazılmaz.
+  currentAnalysisId        String?                   @unique
   createdAt                DateTime                  @default(now())
   business                 Business                  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  currentAnalysis          MediaAnalysis?            @relation("MediaAssetCurrentAnalysis", fields: [currentAnalysisId], references: [id], onDelete: SetNull)
   variants                 ContentVariant[]
   planItems                ContentPlanItem[]
   captureRequestsFulfilled CaptureRequest[]          @relation("CaptureRequestFulfilledBy")
   usages                   MediaUsage[]
   fallbackProposals        ContentFallbackProposal[]
+  analyses                 MediaAnalysis[]           @relation("MediaAnalysisAsset")
 
   @@index([businessId, createdAt])
+}
+
+// Her analiz denemesi (mediaAssetId, version) ile sürümlenir. Güncel analiz MediaAsset.currentAnalysisId
+// ile belirlenir; daha yüksek sürümlü bir SUCCEEDED analiz güncel olduğunda önceki supersededAt alır.
+// result: sağlayıcı çıktısının şemaya göre doğrulanmış, normalize edilmiş hali (ham yük saklanmaz).
+model MediaAnalysis {
+  id              String                  @id @default(cuid())
+  businessId      String
+  mediaAssetId    String
+  version         Int
+  status          MediaAnalysisStatus     @default(PENDING)
+  provider        String
+  model           String
+  provenance      MediaAnalysisProvenance
+  analysisVersion String
+  category        VisualCategory?
+  result          Json?
+  errorCode       String?
+  triggeredById   String?
+  supersededAt    DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  business        Business                @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  mediaAsset      MediaAsset              @relation("MediaAnalysisAsset", fields: [mediaAssetId], references: [id], onDelete: Cascade)
+  currentFor      MediaAsset?             @relation("MediaAssetCurrentAnalysis")
+  triggeredBy     User?                   @relation("MediaAnalysisTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
+
+  @@unique([mediaAssetId, version])
+  @@index([businessId, createdAt])
+  @@index([triggeredById])
 }
 
 model ContentItem {

@@ -59,4 +59,10 @@ Never invent products, prices, campaigns, reviews, events, services, or business
 
 ## Visual authenticity
 
-Phase 5 may add `SAFE ENHANCE`, `BRAND STYLE`, and `CREATIVE CAMPAIGN`. AI may improve presentation but must not misrepresent reality or invent unavailable products, views, services, portions, or conditions. Phase 5 requires explicit user approval and is not active.
+Phase 5 introduces `SAFE_ENHANCE`, `BRAND_STYLE`, and `CREATIVE_CAMPAIGN` as distinct modes. AI may improve lighting, color, contrast, sharpness, noise, crop, perspective, minor distractions, platform composition, and brand presentation. It must not silently invent products, ingredients, portions, views, interiors, people, services, results, or business conditions, or materially alter factual product/service appearance. Authenticity restrictions are domain policy, not prompt wording alone.
+
+Visual analysis is media metadata and context. It never becomes canonical Business Brain truth without existing confirmation or explicit user confirmation. Real-provider analysis and development/demo analysis must be visibly distinguishable. Provider output must be normalized and validated before persistence, and re-analysis must preserve an unambiguous current version without event-sourcing complexity.
+
+## Future shared capability — Ainetra Intent Engine
+
+The future Ainetra Intent Engine may serve Ainetra Social by detecting public social intent signals and Ainetra Sales by turning user-accepted opportunities into leads and pipeline. This is a future architecture note only. Phase 5 does not implement Intent Engine, Sales, or Lead Radar behavior.

@@ -23,9 +23,23 @@ Completed:
 - P4-04 Content Fallback Engine.
 - P4-05 Phase 4 integration review.
 
-## Phase 5 — Planned: Visual Intelligence
+## Phase 5 — Active: Visual Intelligence
 
-Photo analysis, Safe Enhance, Brand Style, platform variants, authenticity protections, before/after review, and provider abstraction.
+Completed:
+
+- P5-01 Visual Analysis Foundation.
+
+Ready:
+
+- P5-02 Safe Enhance.
+
+Planned, not started:
+
+- P5-03 Brand Style.
+- P5-04 Social Variants + Creative Campaign.
+- P5-05 Phase 5 integration review.
+
+Visual Intelligence must preserve factual reality in authentic media, distinguish authentic enhancement from campaign creative, validate provider output, and require user review before later content use.
 
 ## Phase 6 — Planned: Publishing
 
@@ -34,3 +48,7 @@ Meta OAuth, Instagram and Facebook adapters, jobs, retry, token security, and id
 ## Phase 7 — Planned: Analytics + Learning
 
 Published performance ingestion, content comparison, AI insight, Data → Insight → Action, and planning feedback.
+
+## Future shared capability — Ainetra Intent Engine
+
+The future Ainetra Intent Engine may detect public social intent signals for Ainetra Social and pass user-accepted opportunities into Ainetra Sales as leads or pipeline. It is documentation-only during Phase 5; no Intent Engine, Sales, or Lead Radar code is in scope.
