@@ -27,7 +27,8 @@ export type CreateSafeEnhancementOptions = {
   skipRateLimit?: boolean;
 };
 
-const supportedSourceFormats = new Map([
+/** Türev üretiminin desteklediği kaynak biçimleri. P5-03 Marka Stili aynı listeyi kullanır. */
+export const supportedSourceFormats = new Map([
   ["image/jpeg", { extension: "jpg", format: "jpeg" }],
   ["image/png", { extension: "png", format: "png" }],
   ["image/webp", { extension: "webp", format: "webp" }],
@@ -36,7 +37,7 @@ const supportedSourceFormats = new Map([
 const maxEnhancementsPerHour = 20;
 const maxConflictRetries = 3;
 
-function maxOutputBytes() {
+export function maxOutputBytes() {
   return Number(process.env.MAX_UPLOAD_BYTES ?? 8 * 1024 * 1024);
 }
 
@@ -48,7 +49,8 @@ function isRetryableConflict(error: unknown, depth = 0): boolean {
   return isRetryableConflict(candidate.cause, depth + 1);
 }
 
-async function withConflictRetry<T>(run: () => Promise<T>): Promise<T> {
+/** Aynı eşzamanlılık semantiğini paylaşan türev akışları (P5-03 dahil) bu yeniden deneme sarmalını kullanır. */
+export async function withConflictRetry<T>(run: () => Promise<T>): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     try {
       return await run();

@@ -29,14 +29,14 @@ Completed:
 
 - P5-01 Visual Analysis Foundation.
 - P5-02 Safe Enhance.
+- P5-03 Brand Style.
 
 Ready:
 
-- P5-03 Brand Style.
+- P5-04 Social Variants + Creative Campaign.
 
 Planned, not started:
 
-- P5-04 Social Variants + Creative Campaign.
 - P5-05 Phase 5 integration review.
 
 Visual Intelligence must preserve factual reality in authentic media, distinguish authentic enhancement from campaign creative, validate provider output, and require user review before later content use.

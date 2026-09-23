@@ -26,6 +26,8 @@ import {
 import { getMediaAnalysisDetail } from "@/features/visual-analysis/service";
 import { SafeEnhanceReview } from "@/components/safe-enhance-review";
 import { getSafeEnhanceReview } from "@/features/safe-enhance/service";
+import { BrandStyleReview } from "@/components/brand-style-review";
+import { getBrandStyleReview } from "@/features/brand-style/service";
 import { DomainError } from "@/lib/domain-error";
 
 const noticeLabels: Record<string, { text: string; tone: "success" | "warning" }> = {
@@ -43,6 +45,15 @@ const noticeLabels: Record<string, { text: string; tone: "success" | "warning" }
   "enhance-discarded": { text: "İyileştirilmiş sürüm atıldı; orijinal görsel olduğu gibi duruyor.", tone: "success" },
   "enhance-decided": { text: "Bu iyileştirme için karar zaten verilmişti.", tone: "warning" },
   "enhance-error": { text: "Güvenli iyileştirme işlemi tamamlanamadı.", tone: "warning" },
+  "brand-style-ready": { text: "Markanıza göre düzenlenmiş sürüm hazır; aşağıdan karşılaştırıp saklayabilir veya atabilirsiniz.", tone: "success" },
+  "brand-style-pending": { text: "Bu seçim için zaten süren bir marka stili var; yeni bir iş başlatılmadı.", tone: "warning" },
+  "brand-style-failed": { text: "Marka stili tamamlanamadı; kaynak görsel olduğu gibi duruyor.", tone: "warning" },
+  "brand-style-invalid": { text: "Marka stili çıktısı doğrulanamadı ve kaydedilmedi; kaynak görsel olduğu gibi duruyor.", tone: "warning" },
+  "brand-style-rejected": { text: "Bu medya için markaya göre düzenleme çalıştırılamadı (özgünlük sınırları, desteklenmeyen kaynak ya da saatlik sınır olabilir).", tone: "warning" },
+  "brand-style-kept": { text: "Markaya göre düzenlenmiş sürüm kütüphaneye ayrı bir görsel olarak eklendi; kaynak korundu.", tone: "success" },
+  "brand-style-discarded": { text: "Markaya göre düzenlenmiş sürüm atıldı; kaynak görsel olduğu gibi duruyor.", tone: "success" },
+  "brand-style-decided": { text: "Bu marka stili için karar zaten verilmişti.", tone: "warning" },
+  "brand-style-error": { text: "Markaya göre düzenleme işlemi tamamlanamadı.", tone: "warning" },
 };
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR", { dateStyle: "medium", timeStyle: "short" });
@@ -53,8 +64,13 @@ export default async function MediaAnalysisPage({ params, searchParams }: { para
   const [{ id }, query] = await Promise.all([params, searchParams]);
   let detail: Awaited<ReturnType<typeof getMediaAnalysisDetail>>;
   let enhanceReview: Awaited<ReturnType<typeof getSafeEnhanceReview>>;
+  let brandStyleReview: Awaited<ReturnType<typeof getBrandStyleReview>>;
   try {
-    [detail, enhanceReview] = await Promise.all([getMediaAnalysisDetail(user.id, id), getSafeEnhanceReview(user.id, id)]);
+    [detail, enhanceReview, brandStyleReview] = await Promise.all([
+      getMediaAnalysisDetail(user.id, id),
+      getSafeEnhanceReview(user.id, id),
+      getBrandStyleReview(user.id, id),
+    ]);
   } catch (error) {
     if (error instanceof DomainError && (error.code === "NOT_FOUND" || error.code === "FORBIDDEN")) notFound();
     throw error;
@@ -136,6 +152,7 @@ export default async function MediaAnalysisPage({ params, searchParams }: { para
             <div className="empty-state wide"><h3>Bu görsel için güncel bir analiz yok.</h3><p>{summary.latestFailure ? errorCodeLabels[summary.latestFailure.errorCode ?? ""] ?? "Son deneme tamamlanamadı." : "Analiz başlatarak kategori, kalite ve platform uyumu bilgisi alın."}</p></div>
           )}
           <SafeEnhanceReview review={enhanceReview} />
+          <BrandStyleReview review={brandStyleReview} />
           {current && summary.latestFailure && <div className="alert warning">Sürüm {summary.latestFailure.version} denemesi tamamlanamadı ({errorCodeLabels[summary.latestFailure.errorCode ?? ""] ?? "bilinmeyen hata"}); sürüm {current.version} güncel kalmaya devam ediyor.</div>}
           {history.length > 0 && (
             <div className="panel">

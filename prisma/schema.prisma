@@ -239,6 +239,7 @@ enum VisualCategory {
 enum MediaAssetOrigin {
   UPLOAD
   SAFE_ENHANCE
+  BRAND_STYLE
 }
 
 enum MediaEnhancementPreset {
@@ -265,6 +266,42 @@ enum MediaEnhancementProvenance {
   DEVELOPMENT
 }
 
+// P5-03 Marka Stili: kullanıcıya sunulan küçük seçim kümesi. BRAND_RECOMMENDED ("Markama göre")
+// mevcut BrandProfile tercihlerinden türetilir; diğer üçü sabit, ölçülü alternatiflerdir.
+// Bunlar Brand Style seçimleridir; kampanya/kreatif tasarım (P5-04) değildir.
+enum MediaBrandStyleChoice {
+  BRAND_RECOMMENDED
+  NATURAL
+  VIBRANT
+  PREMIUM
+}
+
+enum MediaBrandStyleStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  INVALID_OUTPUT
+}
+
+enum MediaBrandStyleDecision {
+  KEPT
+  DISCARDED
+}
+
+enum MediaBrandStyleProvenance {
+  REAL
+  DEVELOPMENT
+}
+
+// Özgünlük sınırının hangi darlıkta uygulandığı. STRICT: gerçek ürün/kişi görünümü belgeleyen ya da
+// doğrulanamamış görseller (varsayılan). STANDARD: hassas ama ürün rengi kritik olmayan görseller.
+// RELAXED: analizin özgünlük açısından hassas bulmadığı görseller. Stil tercihi bu sınırı genişletemez.
+enum MediaBrandStyleAuthenticityTier {
+  RELAXED
+  STANDARD
+  STRICT
+}
+
 model User {
   id                          String                    @id @default(cuid())
   name                        String
@@ -284,6 +321,8 @@ model User {
   triggeredMediaAnalyses      MediaAnalysis[]           @relation("MediaAnalysisTriggeredBy")
   triggeredMediaEnhancements  MediaEnhancement[]        @relation("MediaEnhancementTriggeredBy")
   decidedMediaEnhancements    MediaEnhancement[]        @relation("MediaEnhancementDecidedBy")
+  triggeredMediaBrandStyles   MediaBrandStyle[]         @relation("MediaBrandStyleTriggeredBy")
+  decidedMediaBrandStyles     MediaBrandStyle[]         @relation("MediaBrandStyleDecidedBy")
 }
 
 model Session {
@@ -327,6 +366,7 @@ model Business {
   fallbackProposals ContentFallbackProposal[]
   mediaAnalyses     MediaAnalysis[]
   mediaEnhancements MediaEnhancement[]
+  mediaBrandStyles  MediaBrandStyle[]
 }
 
 model ContentPlanningRun {
@@ -550,6 +590,9 @@ model BrandProfile {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  // P5-03: bu profilden türetilmiş marka stili çalıştırmaları. Kayıtlar profil sonradan değişse de
+  // kendi anlık görüntüsünü (styleProfile/brandProfileUpdatedAt) korur; geçmiş çıktılar değişmez.
+  mediaBrandStyles MediaBrandStyle[]
 }
 
 model BusinessGoal {
@@ -612,6 +655,8 @@ model MediaAsset {
   analyses                 MediaAnalysis[]           @relation("MediaAnalysisAsset")
   enhancements             MediaEnhancement[]        @relation("MediaEnhancementSource")
   enhancementOutputOf      MediaEnhancement?         @relation("MediaEnhancementOutput")
+  brandStyles              MediaBrandStyle[]         @relation("MediaBrandStyleSource")
+  brandStyleOutputOf       MediaBrandStyle?          @relation("MediaBrandStyleOutput")
 
   @@index([businessId, createdAt])
   @@index([derivedFromId])
@@ -643,6 +688,7 @@ model MediaAnalysis {
   currentFor      MediaAsset?             @relation("MediaAssetCurrentAnalysis")
   triggeredBy     User?                   @relation("MediaAnalysisTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
   enhancements    MediaEnhancement[]      @relation("MediaEnhancementSourceAnalysis")
+  brandStyles     MediaBrandStyle[]       @relation("MediaBrandStyleSourceAnalysis")
 
   @@unique([mediaAssetId, version])
   @@index([businessId, createdAt])
@@ -689,9 +735,69 @@ model MediaEnhancement {
   triggeredBy           User?                      @relation("MediaEnhancementTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
   decidedBy             User?                      @relation("MediaEnhancementDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
 
+  brandStyles           MediaBrandStyle[]          @relation("MediaBrandStyleSourceEnhancement")
+
   @@unique([sourceAssetId, version])
   @@index([businessId, createdAt])
   @@index([sourceAssetId, preset, status])
+  @@index([triggeredById])
+  @@index([decidedById])
+}
+
+// P5-03 Marka Stili: her deneme (sourceAssetId, version) ile sürümlenir. Kaynak, kullanıcının yüklediği
+// orijinal ya da saklanmış bir Safe Enhance türevi olabilir; her iki satır ve baytları da asla değişmez.
+// sourceEnhancementId kaynak Safe Enhance soyunu açıkça kaydeder. Bir marka stili çıktısı yeniden
+// stillendirilemez (belirsiz zincir oluşmaz). styleProfile/brandProfileUpdatedAt, çalıştırma anındaki
+// marka tercihlerinin anlık görüntüsüdür: BrandProfile sonradan değişse de geçmiş kayıtlar aynı kalır.
+// operations: P5-02'nin kapalı piksel sözleşmesine göre doğrulanmış, özgünlük katmanına göre daraltılmış set.
+model MediaBrandStyle {
+  id                    String                          @id @default(cuid())
+  businessId            String
+  sourceAssetId         String
+  sourceEnhancementId   String?
+  version               Int
+  choice                MediaBrandStyleChoice
+  status                MediaBrandStyleStatus           @default(PENDING)
+  decision              MediaBrandStyleDecision?
+  provider              String
+  model                 String
+  provenance            MediaBrandStyleProvenance
+  styleVersion          String
+  profileVersion        String
+  brandProfileId        String?
+  brandProfileUpdatedAt DateTime?
+  styleProfile          Json?
+  operations            Json?
+  authenticityTier      MediaBrandStyleAuthenticityTier @default(STRICT)
+  authenticitySensitive Boolean                         @default(true)
+  sourceAnalysisId      String?
+  outputStorageKey      String?                         @unique
+  outputMimeType        String?
+  outputSize            Int?
+  outputWidth           Int?
+  outputHeight          Int?
+  outputAssetId         String?                         @unique
+  errorCode             String?
+  triggeredById         String?
+  decidedById           String?
+  decidedAt             DateTime?
+  completedAt           DateTime?
+  createdAt             DateTime                        @default(now())
+  updatedAt             DateTime                        @updatedAt
+  business              Business                        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  sourceAsset           MediaAsset                      @relation("MediaBrandStyleSource", fields: [sourceAssetId], references: [id], onDelete: Cascade)
+  sourceEnhancement     MediaEnhancement?               @relation("MediaBrandStyleSourceEnhancement", fields: [sourceEnhancementId], references: [id], onDelete: SetNull)
+  outputAsset           MediaAsset?                     @relation("MediaBrandStyleOutput", fields: [outputAssetId], references: [id], onDelete: SetNull)
+  sourceAnalysis        MediaAnalysis?                  @relation("MediaBrandStyleSourceAnalysis", fields: [sourceAnalysisId], references: [id], onDelete: SetNull)
+  brandProfile          BrandProfile?                   @relation(fields: [brandProfileId], references: [id], onDelete: SetNull)
+  triggeredBy           User?                           @relation("MediaBrandStyleTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
+  decidedBy             User?                           @relation("MediaBrandStyleDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@unique([sourceAssetId, version])
+  @@index([businessId, createdAt])
+  @@index([sourceAssetId, choice, status])
+  @@index([sourceEnhancementId])
+  @@index([brandProfileId])
   @@index([triggeredById])
   @@index([decidedById])
 }
