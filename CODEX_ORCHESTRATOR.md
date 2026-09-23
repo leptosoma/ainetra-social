@@ -2,6 +2,8 @@
 
 Core rule: **Codex orchestrates. Claude implements.** The repository filesystem and Git history are authoritative.
 
+Claude quota is a scarce engineering resource. Read locally, delegate narrowly, and never send Claude deterministic QA work that Codex can perform. Commodity infrastructure: reuse first. Ainetra differentiation: build ourselves.
+
 ## Task loop
 
 1. Inspect Git state and read `TASKS.md`.

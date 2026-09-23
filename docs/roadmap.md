@@ -30,12 +30,9 @@ Completed:
 - P5-01 Visual Analysis Foundation.
 - P5-02 Safe Enhance.
 - P5-03 Brand Style.
-
-Ready:
-
 - P5-04 Social Variants + Creative Campaign.
 
-Planned, not started:
+Ready:
 
 - P5-05 Phase 5 integration review.
 
@@ -45,12 +42,20 @@ Visual Intelligence must preserve factual reality in authentic media, distinguis
 
 After Visual Intelligence and before or alongside Publishing integration, simplify the customer experience without weakening the internal engines. This phase is documented and not started.
 
-- Make the calendar a primary workspace with day, week, month, and year views.
-- Show planned content and clear action states such as ready, media needed, planned, user action needed, and Ainetra can help.
-- A day or content item should explain the need in plain language and offer `Medya ekle`, `Nasıl çekeyim?`, and `Çekemiyorum → Ainetra yardım et`.
+### P5.5A — Calendar Workspace & Dashboard Simplification
+
+- Make the calendar a primary workspace with day, week, month, and year views. Mobile may favor Today, 3-day, and Week with Month as an overview; month cells should use simple icons or status dots.
+- Show planned content and plain action states: Ready, Media needed, Planned, User action needed, and Ainetra can help.
+- A content day should state the need directly, for example: “25 Eylül · Instagram Reel · Akşam servisi · 8–12 saniyelik dikey video gerekiyor.” Offer `Medya ekle`, `Nasıl çekeyim?`, and `Çekemiyorum → Ainetra yardım et`.
 - The future help flow may orchestrate Capture, Content Stock, MediaUsage, Fallback, and Visual Intelligence behind a simple surface: check unused authentic media, reusable media, Safe Enhance, verified-information creative, Creative Campaign when appropriate, then the easiest capture instruction. It must not create misleading synthetic product photography.
-- Shift the dashboard toward operational priorities such as “Bu hafta 7 içerik planlandı. 5 hazır. 2 senden bir şey bekliyor,” supported by a simple weekly action strip.
-- Consider a simpler navigation such as Bugün, Takvim, İçerikler, Medya, Ayarlar; move brand, Business Brain, and strategy under an “İşletmem” or Settings experience only after UX review.
+- Put operational priorities first on the dashboard, for example: “Bu hafta 7 içerik planlandı. 5 hazır. 2 senden bir şey bekliyor.” Keep system internals secondary.
+
+### P5.5B — Mobile Navigation & Capture-First UX
+
+- Treat mobile as a primary capture and upload surface for staff, not a compressed desktop sidebar. Aim for roughly five bottom navigation items: `Bugün`, `Takvim`, a visually dominant central action, `İçerikler`, and `Medya`.
+- The central action may open a compact sheet: `Fotoğraf çek`, `Video çek`, `Galeriden yükle`, `Ainetra ile içerik hazırla`. Prefer a relevant prompt such as “Cuma gönderisi için fotoğraf çek” when the current plan needs it.
+- Move rarely used Marka, Business Brain, Sosyal Strateji, and integrations/settings into an `İşletmem` or settings area after UX review.
+- Support bottom safe areas, iPhone home indicators, Android gesture navigation, thumb-friendly targets, minimal top navigation, and sheets or modals where they make a task simpler.
 
 ## Phase 6 — Planned: Publishing
 

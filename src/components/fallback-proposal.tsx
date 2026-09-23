@@ -9,6 +9,7 @@ const kindLabels: Record<Proposal["kind"], string> = {
   OLDER_UNUSED_AUTHENTIC_MEDIA: "Eski kullanılmamış medya",
   REUSABLE_AUTHENTIC_MEDIA: "Yeniden kullanılabilir medya",
   FORMAT_ADAPTATION: "Format uyarlaması",
+  EXISTING_DESIGNED_CREATIVE: "Hazır tasarım (grafik)",
   CONFIRMED_BUSINESS_INFO: "Onaylı işletme bilgisi",
   VERIFIED_SOCIAL_PROOF: "Doğrulanmış sosyal kanıt",
   BRAND_CREATIVE_PLACEHOLDER: "Marka yer tutucu tasarımı",

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Image from "next/image";
 import { deleteMediaAction, updateMediaPlanningTagsAction, uploadMediaAction } from "@/actions/media";
-import { imagePlanningTags, videoPlanningTags } from "@/features/media/service";
+import { allowedPlanningTagsFor, imagePlanningTags, videoPlanningTags } from "@/features/media/service";
 import { getCurrentUser } from "@/features/auth/session";
 import { getFirstBusinessForUser } from "@/lib/authorization";
 import { prisma } from "@/lib/db";
@@ -13,6 +13,9 @@ import { SafeEnhanceSummaryLine } from "@/components/safe-enhance-summary";
 import { listSafeEnhanceSummaries } from "@/features/safe-enhance/service";
 import { BrandStyleSummaryLine } from "@/components/brand-style-summary";
 import { listBrandStyleSummaries } from "@/features/brand-style/service";
+import { SocialVariantSummaryLine } from "@/components/social-variant-summary";
+import { listSocialVariantSummaries } from "@/features/social-variant/service";
+import { creativeDesignDisclaimer } from "@/features/creative-campaign/labels";
 
 const noticeLabels: Record<string, { text: string; tone: "success" | "warning" }> = {
   "analysis-complete": { text: "Görsel analizi tamamlandı.", tone: "success" },
@@ -28,11 +31,12 @@ export default async function MediaPage({ searchParams }: { searchParams: Promis
   const business = await getFirstBusinessForUser(user.id);
   if (!business) return <EmptyBusiness />;
   const params = await searchParams;
-  const [assets, analyses, enhancements, brandStyles] = await Promise.all([
+  const [assets, analyses, enhancements, brandStyles, socialVariants] = await Promise.all([
     prisma.mediaAsset.findMany({ where: { businessId: business.id }, include: { _count: { select: { variants: true } } }, orderBy: { createdAt: "desc" } }),
     listMediaAnalysisSummaries(user.id, business.id),
     listSafeEnhanceSummaries(user.id, business.id),
     listBrandStyleSummaries(user.id, business.id),
+    listSocialVariantSummaries(user.id, business.id),
   ]);
   const notice = params.notice ? noticeLabels[params.notice] : undefined;
   return (
@@ -49,7 +53,7 @@ export default async function MediaPage({ searchParams }: { searchParams: Promis
             {asset.type === "VIDEO"
               ? <video controls preload="metadata" src={`/media/${asset.id}`} />
               : <Image unoptimized loading={index === 0 ? "eager" : "lazy"} src={`/media/${asset.id}`} alt={asset.originalFilename} width={asset.width ?? 1200} height={asset.height ?? 1200} />}
-            <div><strong title={asset.originalFilename}>{asset.originalFilename}</strong><small>{asset.width && asset.height ? `${asset.width}×${asset.height} · ` : ""}{(asset.size / 1024 / 1024).toFixed(1)} MB</small><small>{asset._count.variants} içerikte kullanılıyor</small><MediaAnalysisSummaryCard mediaAssetId={asset.id} summary={analyses.get(asset.id)} /><SafeEnhanceSummaryLine mediaAssetId={asset.id} origin={asset.origin} summary={enhancements.get(asset.id)} /><BrandStyleSummaryLine mediaAssetId={asset.id} origin={asset.origin} summary={brandStyles.get(asset.id)} /><form action={updateMediaPlanningTagsAction} className="media-tag-form"><input type="hidden" name="mediaAssetId" value={asset.id} /><div className="media-tag-options">{(asset.type === "IMAGE" ? imagePlanningTags : videoPlanningTags).map((tag) => <label key={tag}><input type="checkbox" name="tags" value={tag} defaultChecked={asset.tags.includes(tag)} />{tag.replaceAll("_", " ")}</label>)}</div><button className="mini-button" type="submit">Etiketleri kaydet</button></form></div>
+            <div><strong title={asset.originalFilename}>{asset.originalFilename}</strong><small>{asset.width && asset.height ? `${asset.width}×${asset.height} · ` : ""}{(asset.size / 1024 / 1024).toFixed(1)} MB</small><small>{asset._count.variants} içerikte kullanılıyor</small><MediaAnalysisSummaryCard mediaAssetId={asset.id} summary={analyses.get(asset.id)} /><SafeEnhanceSummaryLine mediaAssetId={asset.id} origin={asset.origin} summary={enhancements.get(asset.id)} /><BrandStyleSummaryLine mediaAssetId={asset.id} origin={asset.origin} summary={brandStyles.get(asset.id)} /><SocialVariantSummaryLine mediaAssetId={asset.id} origin={asset.origin} summary={socialVariants.get(asset.id)} /><form action={updateMediaPlanningTagsAction} className="media-tag-form"><input type="hidden" name="mediaAssetId" value={asset.id} /><div className="media-tag-options">{allowedPlanningTagsFor(asset).map((tag) => <label key={tag}><input type="checkbox" name="tags" value={tag} defaultChecked={asset.tags.includes(tag)} />{tag.replaceAll("_", " ")}</label>)}</div>{asset.origin === "CREATIVE_CAMPAIGN" && <small className="form-note">{creativeDesignDisclaimer}</small>}<button className="mini-button" type="submit">Etiketleri kaydet</button></form></div>
             <form action={deleteMediaAction}><input type="hidden" name="mediaAssetId" value={asset.id} /><button className="icon-button" type="submit" aria-label="Medyayı sil" disabled={asset._count.variants > 0}>×</button></form>
           </article>
         ))}

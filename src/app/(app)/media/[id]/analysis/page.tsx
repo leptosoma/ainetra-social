@@ -28,6 +28,8 @@ import { SafeEnhanceReview } from "@/components/safe-enhance-review";
 import { getSafeEnhanceReview } from "@/features/safe-enhance/service";
 import { BrandStyleReview } from "@/components/brand-style-review";
 import { getBrandStyleReview } from "@/features/brand-style/service";
+import { SocialVariantReview } from "@/components/social-variant-review";
+import { getSocialVariantReview } from "@/features/social-variant/service";
 import { DomainError } from "@/lib/domain-error";
 
 const noticeLabels: Record<string, { text: string; tone: "success" | "warning" }> = {
@@ -54,6 +56,15 @@ const noticeLabels: Record<string, { text: string; tone: "success" | "warning" }
   "brand-style-discarded": { text: "Markaya göre düzenlenmiş sürüm atıldı; kaynak görsel olduğu gibi duruyor.", tone: "success" },
   "brand-style-decided": { text: "Bu marka stili için karar zaten verilmişti.", tone: "warning" },
   "brand-style-error": { text: "Markaya göre düzenleme işlemi tamamlanamadı.", tone: "warning" },
+  "variant-ready": { text: "Sosyal format sürümü hazır; aşağıdan karşılaştırıp saklayabilir veya atabilirsiniz.", tone: "success" },
+  "variant-pending": { text: "Bu seçim için zaten bekleyen bir sürüm var; yeni bir iş başlatılmadı.", tone: "warning" },
+  "variant-failed": { text: "Format sürümü tamamlanamadı; kaynak görsel olduğu gibi duruyor.", tone: "warning" },
+  "variant-invalid": { text: "Format sürümünün çıktısı doğrulanamadı ve kaydedilmedi; kaynak görsel olduğu gibi duruyor.", tone: "warning" },
+  "variant-rejected": { text: "Bu medya için sosyal format sürümü hazırlanamadı (tanımlı oran kuralı, desteklenen kaynak ya da saatlik sınır olabilir).", tone: "warning" },
+  "variant-kept": { text: "Format sürümü kütüphaneye ayrı bir görsel olarak eklendi; kaynak korundu. Bu işlem içeriği onaylamaz, planlamaz veya yayınlamaz.", tone: "success" },
+  "variant-discarded": { text: "Format sürümü atıldı; kaynak görsel olduğu gibi duruyor.", tone: "success" },
+  "variant-decided": { text: "Bu format sürümü için karar zaten verilmişti.", tone: "warning" },
+  "variant-error": { text: "Sosyal format sürümü işlemi tamamlanamadı.", tone: "warning" },
 };
 
 const dateFormat = new Intl.DateTimeFormat("tr-TR", { dateStyle: "medium", timeStyle: "short" });
@@ -65,11 +76,13 @@ export default async function MediaAnalysisPage({ params, searchParams }: { para
   let detail: Awaited<ReturnType<typeof getMediaAnalysisDetail>>;
   let enhanceReview: Awaited<ReturnType<typeof getSafeEnhanceReview>>;
   let brandStyleReview: Awaited<ReturnType<typeof getBrandStyleReview>>;
+  let socialVariantReview: Awaited<ReturnType<typeof getSocialVariantReview>>;
   try {
-    [detail, enhanceReview, brandStyleReview] = await Promise.all([
+    [detail, enhanceReview, brandStyleReview, socialVariantReview] = await Promise.all([
       getMediaAnalysisDetail(user.id, id),
       getSafeEnhanceReview(user.id, id),
       getBrandStyleReview(user.id, id),
+      getSocialVariantReview(user.id, id),
     ]);
   } catch (error) {
     if (error instanceof DomainError && (error.code === "NOT_FOUND" || error.code === "FORBIDDEN")) notFound();
@@ -153,6 +166,7 @@ export default async function MediaAnalysisPage({ params, searchParams }: { para
           )}
           <SafeEnhanceReview review={enhanceReview} />
           <BrandStyleReview review={brandStyleReview} />
+          <SocialVariantReview review={socialVariantReview} />
           {current && summary.latestFailure && <div className="alert warning">Sürüm {summary.latestFailure.version} denemesi tamamlanamadı ({errorCodeLabels[summary.latestFailure.errorCode ?? ""] ?? "bilinmeyen hata"}); sürüm {current.version} güncel kalmaya devam ediyor.</div>}
           {history.length > 0 && (
             <div className="panel">

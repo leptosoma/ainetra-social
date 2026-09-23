@@ -18,14 +18,9 @@ Phase 5 — Visual Intelligence
 - P5-01 Visual Analysis Foundation.
 - P5-02 Safe Enhance.
 - P5-03 Brand Style.
+- P5-04 Social Variants + Creative Campaign.
 
 ## Ready
-
-### P5-04 — Social Variants + Creative Campaign
-
-Create Feed, Story, Reel Cover, and Square variants; keep separately labeled campaign creatives distinct from authentic photo enhancement.
-
-## Queued — not ready
 
 ### P5-05 — Phase 5 Integration Review
 
@@ -35,7 +30,10 @@ Validate Upload → Analyze → Recommend → Safe Enhance / Brand Style → Pla
 
 - Review whether Content Stock's deterministic greedy allocation should use optimal matching for complex multi-tag inventories; current logic can conservatively undercount coverage but never overcounts it.
 - Add timeout/recovery handling for abandoned `PENDING` visual-analysis, Safe Enhance, and Brand Style attempts before asynchronous production providers are introduced.
-- Phase 5.5 — Simple Experience & Calendar Workspace. Future only: day/week/month/year calendar, action-first status language, simplified dashboard/navigation, and an “Ainetra yardım et” flow over the existing engines.
+- Avoid duplicate Feed/Square actions when an active platform rule recommends 1:1 for both; keep rule provenance and the simple user-facing format names.
+- Improve Creative Campaign notice handling for non-fact validation errors and measure long confirmed text before rendering it into narrow templates.
+- Phase 5.5A — Calendar Workspace & Dashboard Simplification. Future only: day/week/month/year calendar, plain action states, a content-day media/help flow, and operational dashboard priorities.
+- Phase 5.5B — Mobile Navigation & Capture-First UX. Future only: phone-first bottom navigation with a prominent capture action, context-aware capture prompts, safe-area support, and thumb-friendly interactions.
 - Ainetra product family architecture — future only: Social, Sales, Serve, Control, and a deliberately small shared Core extracted only from proven cross-product needs.
 - Ainetra Intent Engine — future shared capability for public social intent signals in Ainetra Social and accepted lead/pipeline opportunities in Ainetra Sales. Documentation only; no Phase 5 implementation.
 - Phase 6 Publishing.

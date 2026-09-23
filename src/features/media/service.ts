@@ -29,6 +29,19 @@ function validatePlanningTags(tags: string[], allowed: readonly string[]) {
   return tags;
 }
 
+/**
+ * P5-04: kasıtlı olarak tasarlanmış bir kreatif, gerçek fotoğraf/video kanıtı isteyen bir planlama
+ * ihtiyacını karşılayamaz. Bu sınır etiket düzeyinde uygulanır: tasarım çıktısı yalnızca
+ * CUSTOM_GRAPHIC etiketi alabilir, bu yüzden PHOTO_* / VIDEO_* gereksinimlerine hiçbir zaman
+ * eşleşmez (Content Stock, Capture ve Fallback aynı etiketleri okur).
+ *
+ * Teknik format türevleri (SOCIAL_VARIANT) bu kısıtın dışındadır: kaynağı kadar özgündürler.
+ */
+export function allowedPlanningTagsFor(asset: { type: string; origin: string }): readonly string[] {
+  if (asset.origin === "CREATIVE_CAMPAIGN") return ["CUSTOM_GRAPHIC"];
+  return asset.type === "IMAGE" ? imagePlanningTags : videoPlanningTags;
+}
+
 // Basit dosya imzası (magic bytes) kontrolü: beyan edilen MIME türüne güvenmek yerine
 // dosya içeriğinin gerçekten o konteyner formatında olduğunu doğrular. ffprobe/codec
 // düzeyinde bir doğrulama değildir; amaç yanlış etiketlenmiş/rastgele dosyaları elemektir.
@@ -119,7 +132,10 @@ export async function updateMediaPlanningTags(userId: string, mediaAssetId: stri
   const asset = await prisma.mediaAsset.findUnique({ where: { id: mediaAssetId } });
   if (!asset) throw new DomainError("Medya bulunamadı.", "NOT_FOUND");
   await requireMembership(userId, asset.businessId);
-  const tags = validatePlanningTags(rawTags, asset.type === "IMAGE" ? imagePlanningTags : videoPlanningTags);
+  if (asset.origin === "CREATIVE_CAMPAIGN" && rawTags.some((tag) => tag !== "CUSTOM_GRAPHIC")) {
+    throw new DomainError("Tasarım kreatifi yalnızca özel tasarım ihtiyacı için işaretlenebilir; gerçek fotoğraf gerektiren bir ihtiyacı karşılayamaz.", "VALIDATION_ERROR");
+  }
+  const tags = validatePlanningTags(rawTags, allowedPlanningTagsFor(asset));
   return prisma.$transaction(async (tx) => {
     const updated = await tx.mediaAsset.update({ where: { id: asset.id }, data: { tags } });
     await tx.contentPlanItem.updateMany({

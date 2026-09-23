@@ -8,6 +8,7 @@ const navigation = [
   ["◫", "İçerik Planı", "/content-plan"],
   ["□", "Takvim", "/calendar"],
   ["▧", "Medya", "/media"],
+  ["◨", "Kreatif", "/creative"],
   ["◇", "Marka", "/brand"],
   ["◎", "Sosyal Strateji", "/strategy"],
   ["◈", "Business Brain", "/business-brain"],

@@ -104,7 +104,7 @@ function factFixture(businessId: string, overrides: { category?: string; value?:
 }
 
 // --- Saf değerlendirme yardımcıları ---
-const asset = (id: string, tags: string[], overrides: Partial<FallbackMediaAsset> = {}): FallbackMediaAsset => ({ id, type: "IMAGE", tags, createdAt: daysAgo(3), originalFilename: `${id}.jpg`, ...overrides });
+const asset = (id: string, tags: string[], overrides: Partial<FallbackMediaAsset> = {}): FallbackMediaAsset => ({ id, type: "IMAGE", tags, origin: "UPLOAD", createdAt: daysAgo(3), originalFilename: `${id}.jpg`, ...overrides });
 const used = (id: string, lastUsedAt: Date, usageCount = 1): [string, MediaUsageSummary] => [id, { mediaAssetId: id, usageCount, lastUsedAt, neverUsed: false }];
 const fact = (id: string, overrides: Partial<FallbackConfirmedFact> = {}): FallbackConfirmedFact => ({ id, category: "FACT", key: id, value: "Odun fırınında pişirilir", source: "USER", confirmedAt: now, ...overrides });
 const baseInput = { item: { id: "item", mediaRequirement: "PHOTO_PRODUCT" as const, pillar: "PRODUCT" }, assets: [] as FallbackMediaAsset[], usage: new Map<string, MediaUsageSummary>(), confirmedFacts: [] as FallbackConfirmedFact[], verifiedSocialProof: [], brand: { businessName: "Mimoza", hasBrandProfile: true }, now };
@@ -180,6 +180,32 @@ describe("Ainetra Phase 4 P4-04 — Content Fallback (pure ranking)", () => {
 
     const notRequired = evaluateContentFallback({ ...baseInput, item: { ...baseInput.item, mediaRequirement: "NO_NEW_MEDIA_REQUIRED" } });
     expect(notRequired.proposal).toBeNull();
+  });
+
+  it("never labels a designed creative as authentic media: it may only cover a CUSTOM_GRAPHIC need, explicitly as a design", () => {
+    const design = asset("design", ["CUSTOM_GRAPHIC"], { origin: "CREATIVE_CAMPAIGN", originalFilename: "mimoza-tasarim-s1.png", createdAt: daysAgo(1) });
+    const graphicItem = { ...baseInput.item, mediaRequirement: "CUSTOM_GRAPHIC" as const };
+
+    const graphic = evaluateContentFallback({ ...baseInput, item: graphicItem, assets: [design] });
+    expect(graphic.proposal).toMatchObject({ kind: "EXISTING_DESIGNED_CREATIVE", mediaAssetId: "design", targetMediaRequirement: "CUSTOM_GRAPHIC" });
+    expect(graphic.proposal!.rationale).toContain("Bu bir tasarımdır, gerçek ürün/ekip/mekân fotoğrafı değildir");
+    expect(graphic.proposal!.rationale.toLocaleLowerCase("tr")).not.toContain("özgün");
+
+    // Tasarım, gerçek fotoğraf isteyen bir ihtiyaca ne doğrudan ne de format uyarlamasıyla önerilir;
+    // etiketi bozulmuş olsa bile motor onu fotoğraf/video ihtiyacına aday saymaz.
+    const mistagged = asset("mistagged-design", ["PHOTO_PRODUCT", "PHOTO_ATMOSPHERE"], { origin: "CREATIVE_CAMPAIGN" });
+    const photo = evaluateContentFallback({ ...baseInput, assets: [design, mistagged] });
+    expect(photo.proposal).toMatchObject({ kind: "BRAND_CREATIVE_PLACEHOLDER", mediaAssetId: null, targetMediaRequirement: "CUSTOM_GRAPHIC" });
+
+    // Özgün medya, özel tasarım ihtiyacında bile tasarımdan önce gelir.
+    const authentic = asset("uploaded-graphic", ["CUSTOM_GRAPHIC"], { createdAt: daysAgo(9) });
+    const both = evaluateContentFallback({ ...baseInput, item: graphicItem, assets: [design, authentic] });
+    expect(both.proposal).toMatchObject({ kind: "UNUSED_AUTHENTIC_MEDIA", mediaAssetId: "uploaded-graphic" });
+
+    // Yakınlık koruması tasarımlar için de işler: yakın zamanda kullanılmış tasarım önerilmez.
+    const recentlyUsed = evaluateContentFallback({ ...baseInput, item: graphicItem, assets: [design], usage: new Map([used("design", daysAgo(5))]) });
+    expect(recentlyUsed.proposal).toBeNull();
+    expect(recentlyUsed.reason).toContain("1 uygun medya son 30 gün içinde kullanıldığı için önerilmedi");
   });
 
   it("is deterministic regardless of asset input order", () => {

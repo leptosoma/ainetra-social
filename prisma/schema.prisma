@@ -194,6 +194,7 @@ enum ContentFallbackKind {
   OLDER_UNUSED_AUTHENTIC_MEDIA
   REUSABLE_AUTHENTIC_MEDIA
   FORMAT_ADAPTATION
+  EXISTING_DESIGNED_CREATIVE
   CONFIRMED_BUSINESS_INFO
   VERIFIED_SOCIAL_PROOF
   BRAND_CREATIVE_PLACEHOLDER
@@ -240,6 +241,8 @@ enum MediaAssetOrigin {
   UPLOAD
   SAFE_ENHANCE
   BRAND_STYLE
+  SOCIAL_VARIANT
+  CREATIVE_CAMPAIGN
 }
 
 enum MediaEnhancementPreset {
@@ -302,6 +305,67 @@ enum MediaBrandStyleAuthenticityTier {
   STRICT
 }
 
+// P5-04 Sosyal Varyant: kullanıcıya sunulan basit format eylemleri. Bunlar Ainetra'nın eylem adlarıdır;
+// hedef oran her zaman mevcut bir Platform Intelligence ASPECT_RATIO kuralından okunur, burada
+// tanımlanmaz. Sosyal varyant teknik bir türevdir: kaynak özgünse çıktı da özgündür.
+enum MediaSocialVariantFormat {
+  FEED
+  STORY
+  REEL_COVER
+  SQUARE
+}
+
+// COVER = güvenli merkez kırpma kurulabildi. CONTAIN = güvenli kırpma kurulamadı; fotoğrafın tamamı
+// korunup boşluk düz renkle dolduruldu. Bu, konu tanıyan bir kırpma değildir; deterministik geometridir.
+enum MediaSocialVariantFit {
+  COVER
+  CONTAIN
+}
+
+enum MediaSocialVariantStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  INVALID_OUTPUT
+}
+
+enum MediaSocialVariantDecision {
+  KEPT
+  DISCARDED
+}
+
+enum MediaSocialVariantProvenance {
+  REAL
+  DEVELOPMENT
+}
+
+// P5-04 Kreatif Kampanya: kasıtlı olarak küçük bir tasarım kümesi. Her kategori yalnızca KANONİK ve
+// ONAYLI Business Brain bilgisiyle beslenir; bilgi yoksa kreatif üretilmez. Bu çıktılar tasarım
+// görselidir ve hiçbir koşulda gerçek ürün/ekip/mekân fotoğrafı olarak sunulmaz.
+enum MediaCreativeCategory {
+  BUSINESS_INTRO
+  PRODUCTS_SERVICES
+  LOCATION_INFO
+  CONFIRMED_FACTS
+}
+
+enum MediaCreativeStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  INVALID_OUTPUT
+}
+
+enum MediaCreativeDecision {
+  KEPT
+  DISCARDED
+}
+
+enum MediaCreativeProvenance {
+  REAL
+  DEVELOPMENT
+}
+
 model User {
   id                          String                    @id @default(cuid())
   name                        String
@@ -323,6 +387,10 @@ model User {
   decidedMediaEnhancements    MediaEnhancement[]        @relation("MediaEnhancementDecidedBy")
   triggeredMediaBrandStyles   MediaBrandStyle[]         @relation("MediaBrandStyleTriggeredBy")
   decidedMediaBrandStyles     MediaBrandStyle[]         @relation("MediaBrandStyleDecidedBy")
+  triggeredSocialVariants     MediaSocialVariant[]      @relation("MediaSocialVariantTriggeredBy")
+  decidedSocialVariants       MediaSocialVariant[]      @relation("MediaSocialVariantDecidedBy")
+  triggeredCreativeCampaigns  MediaCreativeCampaign[]   @relation("MediaCreativeCampaignTriggeredBy")
+  decidedCreativeCampaigns    MediaCreativeCampaign[]   @relation("MediaCreativeCampaignDecidedBy")
 }
 
 model Session {
@@ -367,6 +435,8 @@ model Business {
   mediaAnalyses     MediaAnalysis[]
   mediaEnhancements MediaEnhancement[]
   mediaBrandStyles  MediaBrandStyle[]
+  socialVariants    MediaSocialVariant[]
+  creativeCampaigns MediaCreativeCampaign[]
 }
 
 model ContentPlanningRun {
@@ -410,6 +480,8 @@ model PlatformRule {
   createdAt          DateTime                   @default(now())
   updatedAt          DateTime                   @updatedAt
   business           Business?                  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  socialVariants     MediaSocialVariant[]
+  creativeCampaigns  MediaCreativeCampaign[]
 
   @@unique([businessId, platform, contentType, ruleKey, effectiveFrom])
   @@index([platform, active, effectiveFrom])
@@ -580,19 +652,22 @@ model Membership {
 }
 
 model BrandProfile {
-  id              String   @id @default(cuid())
-  businessId      String   @unique
-  description     String   @default("")
-  targetAudience  String   @default("")
-  languages       String[] @default(["tr"])
-  productsSummary String   @default("")
-  toneDimensions  Json     @default("{}")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  business        Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  id                String                  @id @default(cuid())
+  businessId        String                  @unique
+  description       String                  @default("")
+  targetAudience    String                  @default("")
+  languages         String[]                @default(["tr"])
+  productsSummary   String                  @default("")
+  toneDimensions    Json                    @default("{}")
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  business          Business                @relation(fields: [businessId], references: [id], onDelete: Cascade)
   // P5-03: bu profilden türetilmiş marka stili çalıştırmaları. Kayıtlar profil sonradan değişse de
   // kendi anlık görüntüsünü (styleProfile/brandProfileUpdatedAt) korur; geçmiş çıktılar değişmez.
-  mediaBrandStyles MediaBrandStyle[]
+  mediaBrandStyles  MediaBrandStyle[]
+  // P5-04: bu profilden türetilen kreatif kampanya çalıştırmaları. Her kayıt kendi marka anlık
+  // görüntüsünü saklar; profil sonradan değişse de geçmiş çıktı aynı kalır.
+  creativeCampaigns MediaCreativeCampaign[]
 }
 
 model BusinessGoal {
@@ -657,6 +732,12 @@ model MediaAsset {
   enhancementOutputOf      MediaEnhancement?         @relation("MediaEnhancementOutput")
   brandStyles              MediaBrandStyle[]         @relation("MediaBrandStyleSource")
   brandStyleOutputOf       MediaBrandStyle?          @relation("MediaBrandStyleOutput")
+  socialVariants           MediaSocialVariant[]      @relation("MediaSocialVariantSource")
+  socialVariantRootOf      MediaSocialVariant[]      @relation("MediaSocialVariantRoot")
+  socialVariantOutputOf    MediaSocialVariant?       @relation("MediaSocialVariantOutput")
+  creativeCampaigns        MediaCreativeCampaign[]   @relation("MediaCreativeCampaignSource")
+  creativeCampaignRootOf   MediaCreativeCampaign[]   @relation("MediaCreativeCampaignRoot")
+  creativeCampaignOutputOf MediaCreativeCampaign?    @relation("MediaCreativeCampaignOutput")
 
   @@index([businessId, createdAt])
   @@index([derivedFromId])
@@ -689,6 +770,7 @@ model MediaAnalysis {
   triggeredBy     User?                   @relation("MediaAnalysisTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
   enhancements    MediaEnhancement[]      @relation("MediaEnhancementSourceAnalysis")
   brandStyles     MediaBrandStyle[]       @relation("MediaBrandStyleSourceAnalysis")
+  socialVariants  MediaSocialVariant[]    @relation("MediaSocialVariantSourceAnalysis")
 
   @@unique([mediaAssetId, version])
   @@index([businessId, createdAt])
@@ -735,7 +817,8 @@ model MediaEnhancement {
   triggeredBy           User?                      @relation("MediaEnhancementTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
   decidedBy             User?                      @relation("MediaEnhancementDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
 
-  brandStyles           MediaBrandStyle[]          @relation("MediaBrandStyleSourceEnhancement")
+  brandStyles    MediaBrandStyle[]    @relation("MediaBrandStyleSourceEnhancement")
+  socialVariants MediaSocialVariant[] @relation("MediaSocialVariantSourceEnhancement")
 
   @@unique([sourceAssetId, version])
   @@index([businessId, createdAt])
@@ -792,6 +875,7 @@ model MediaBrandStyle {
   brandProfile          BrandProfile?                   @relation(fields: [brandProfileId], references: [id], onDelete: SetNull)
   triggeredBy           User?                           @relation("MediaBrandStyleTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
   decidedBy             User?                           @relation("MediaBrandStyleDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+  socialVariants        MediaSocialVariant[]            @relation("MediaSocialVariantSourceBrandStyle")
 
   @@unique([sourceAssetId, version])
   @@index([businessId, createdAt])
@@ -994,4 +1078,144 @@ model ContentFallbackProposal {
   @@index([planId])
   @@index([mediaAssetId])
   @@index([acceptedById])
+}
+
+// P5-04 Sosyal Varyant: kabul edilmiş özgün bir görselden, mevcut Platform Intelligence oran kuralına
+// göre üretilen TEKNİK format türevi. Her deneme (sourceAssetId, version) ile sürümlenir; kaynak satır
+// ve baytları hiçbir yolda değişmez. Çıktı ayrı bir anahtara yazılır ve yalnızca kullanıcı "Sakla"
+// dediğinde ayrı bir MediaAsset (origin SOCIAL_VARIANT) olur.
+//
+// Kural provenansı kayda geçer: ruleId/ruleKey/ruleEffectiveFrom ve kuralın anlık görüntüsü. Teknik
+// platform gereksinimi burada ÇOĞALTILMAZ veya UYDURULMAZ; yalnızca okunan kural saklanır.
+// Soy: sourceAssetId doğrudan kaynak, rootAssetId ise zincirin en başındaki yüklenen orijinaldir.
+// Aynı (kaynak, platform, format) için aynı anda tek aktif deneme olabilir; karar verilmiş bir
+// istek yeniden çalıştırıldığında yeni bir sürüm açılır ve geçmiş olduğu gibi kalır.
+model MediaSocialVariant {
+  id                  String                       @id @default(cuid())
+  businessId          String
+  sourceAssetId       String
+  rootAssetId         String?
+  sourceEnhancementId String?
+  sourceBrandStyleId  String?
+  sourceAnalysisId    String?
+  version             Int
+  platform            SocialPlatform
+  contentType         ContentType
+  format              MediaSocialVariantFormat
+  status              MediaSocialVariantStatus     @default(PENDING)
+  decision            MediaSocialVariantDecision?
+  provider            String
+  model               String
+  provenance          MediaSocialVariantProvenance
+  variantVersion      String
+  ruleId              String?
+  ruleKey             String
+  ruleEffectiveFrom   DateTime
+  ruleSnapshot        Json
+  targetAspectRatio   String
+  fit                 MediaSocialVariantFit
+  // Güvenli kırpma kurulamadığı için fotoğrafın tamamı korundu; kullanıcı sonucu mutlaka görmeli.
+  reviewNeeded        Boolean                      @default(false)
+  operations          Json?
+  outputStorageKey    String?                      @unique
+  outputMimeType      String?
+  outputSize          Int?
+  outputWidth         Int?
+  outputHeight        Int?
+  outputAssetId       String?                      @unique
+  errorCode           String?
+  triggeredById       String?
+  decidedById         String?
+  decidedAt           DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime                     @default(now())
+  updatedAt           DateTime                     @updatedAt
+  business            Business                     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  sourceAsset         MediaAsset                   @relation("MediaSocialVariantSource", fields: [sourceAssetId], references: [id], onDelete: Cascade)
+  rootAsset           MediaAsset?                  @relation("MediaSocialVariantRoot", fields: [rootAssetId], references: [id], onDelete: SetNull)
+  outputAsset         MediaAsset?                  @relation("MediaSocialVariantOutput", fields: [outputAssetId], references: [id], onDelete: SetNull)
+  sourceEnhancement   MediaEnhancement?            @relation("MediaSocialVariantSourceEnhancement", fields: [sourceEnhancementId], references: [id], onDelete: SetNull)
+  sourceBrandStyle    MediaBrandStyle?             @relation("MediaSocialVariantSourceBrandStyle", fields: [sourceBrandStyleId], references: [id], onDelete: SetNull)
+  sourceAnalysis      MediaAnalysis?               @relation("MediaSocialVariantSourceAnalysis", fields: [sourceAnalysisId], references: [id], onDelete: SetNull)
+  rule                PlatformRule?                @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  triggeredBy         User?                        @relation("MediaSocialVariantTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
+  decidedBy           User?                        @relation("MediaSocialVariantDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@unique([sourceAssetId, version])
+  @@index([businessId, createdAt])
+  @@index([sourceAssetId, platform, format, status])
+  @@index([rootAssetId])
+  @@index([sourceEnhancementId])
+  @@index([sourceBrandStyleId])
+  @@index([ruleId])
+  @@index([triggeredById])
+  @@index([decidedById])
+}
+
+// P5-04 Kreatif Kampanya: açıkça TASARIM olarak tanımlanan, bilgilendirici bir görsel. Sosyal
+// Varyant tablosundan ayrıdır çünkü ayrı bir üründür: teknik türev değil, kurgulanmış tasarım.
+//
+// copy yalnızca factRefs içindeki kanonik ve ONAYLI Business Brain bilgilerinden kurulur; kampanya,
+// indirim, fiyat, ürün, hizmet, etkinlik, saat, yorum, manzara, uygunluk veya teklif koşulu
+// uydurulmaz. factRefs/copy/brandSnapshot/ruleSnapshot birer anlık görüntüdür: bilgi, kural, metin
+// veya marka tercihi sonradan değişse de geçmiş çıktı aynı kalır.
+// sourceAssetId yalnızca kabul edilmiş gerçek bir medya kullanıldığında dolar; çıktı yine de tasarım
+// olarak işaretlenir ve yalnızca CUSTOM_GRAPHIC planlama etiketi alabilir.
+model MediaCreativeCampaign {
+  id                    String                   @id @default(cuid())
+  businessId            String
+  version               Int
+  category              MediaCreativeCategory
+  status                MediaCreativeStatus      @default(PENDING)
+  decision              MediaCreativeDecision?
+  provider              String
+  model                 String
+  provenance            MediaCreativeProvenance
+  creativeVersion       String
+  platform              SocialPlatform
+  contentType           ContentType
+  format                MediaSocialVariantFormat
+  ruleId                String?
+  ruleKey               String
+  ruleEffectiveFrom     DateTime
+  ruleSnapshot          Json
+  targetAspectRatio     String
+  factRefs              Json
+  copy                  Json
+  brandProfileId        String?
+  brandProfileUpdatedAt DateTime?
+  brandSnapshot         Json
+  sourceAssetId         String?
+  rootAssetId           String?
+  outputStorageKey      String?                  @unique
+  outputMimeType        String?
+  outputSize            Int?
+  outputWidth           Int?
+  outputHeight          Int?
+  outputAssetId         String?                  @unique
+  errorCode             String?
+  triggeredById         String?
+  decidedById           String?
+  decidedAt             DateTime?
+  completedAt           DateTime?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  business              Business                 @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  sourceAsset           MediaAsset?              @relation("MediaCreativeCampaignSource", fields: [sourceAssetId], references: [id], onDelete: SetNull)
+  rootAsset             MediaAsset?              @relation("MediaCreativeCampaignRoot", fields: [rootAssetId], references: [id], onDelete: SetNull)
+  outputAsset           MediaAsset?              @relation("MediaCreativeCampaignOutput", fields: [outputAssetId], references: [id], onDelete: SetNull)
+  brandProfile          BrandProfile?            @relation(fields: [brandProfileId], references: [id], onDelete: SetNull)
+  rule                  PlatformRule?            @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  triggeredBy           User?                    @relation("MediaCreativeCampaignTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
+  decidedBy             User?                    @relation("MediaCreativeCampaignDecidedBy", fields: [decidedById], references: [id], onDelete: SetNull)
+
+  @@unique([businessId, version])
+  @@index([businessId, createdAt])
+  @@index([businessId, category, status])
+  @@index([sourceAssetId])
+  @@index([rootAssetId])
+  @@index([brandProfileId])
+  @@index([ruleId])
+  @@index([triggeredById])
+  @@index([decidedById])
 }

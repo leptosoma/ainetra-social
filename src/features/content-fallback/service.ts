@@ -2,7 +2,7 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 import type { ContentFallbackProposal, Prisma } from "../../../generated/prisma/client";
-import type { BusinessAttributeCategory, ContentFallbackKind, MediaRequirement, MediaType } from "../../../generated/prisma/enums";
+import type { BusinessAttributeCategory, ContentFallbackKind, MediaAssetOrigin, MediaRequirement, MediaType } from "../../../generated/prisma/enums";
 import { prisma } from "@/lib/db";
 import { DomainError } from "@/lib/domain-error";
 import { requireMembership } from "@/lib/authorization";
@@ -22,6 +22,8 @@ import { fulfillCaptureRequestsForItems, syncCaptureRequestsForActiveItems } fro
 //  3. REUSABLE_AUTHENTIC_MEDIA      — gereksinim etiketli, daha önce kullanılmış ama reuseProtectionDays dışında kalan medya
 //  4. FORMAT_ADAPTATION             — aynı medya ailesinde (fotoğraf/video) farklı etiketli, yakın zamanda kullanılmamış medya;
 //                                     kabulde öğenin medya ihtiyacı o etikete uyarlanır
+//  4b. EXISTING_DESIGNED_CREATIVE  — Creative Campaign (P5-04) çıktısı hazır tasarım; YALNIZCA CUSTOM_GRAPHIC ihtiyacı için
+//                                     önerilir, asla özgün medya olarak sunulmaz ve fotoğraf/video kanıtı isteyen ihtiyacı karşılamaz
 //  5. CONFIRMED_BUSINESS_INFO       — yalnızca kanonik CONFIRMED Business Brain bilgileri; kabulde öğe yeni medya gerektirmez olur
 //  6. VERIFIED_SOCIAL_PROOF         — yalnızca gerçek doğrulanmış veri varsa (bugün böyle bir kaynak yok; asla uydurulmaz)
 //  7. BRAND_CREATIVE_PLACEHOLDER    — marka kimliğiyle hazırlanacak yer tutucu tasarım; kabulde öğe CUSTOM_GRAPHIC ister
@@ -33,7 +35,7 @@ export type FallbackPolicy = { reuseProtectionDays: number; freshDays: number };
 export const defaultFallbackPolicy: FallbackPolicy = { reuseProtectionDays: defaultContentStockPolicy.reuseProtectionDays, freshDays: 30 };
 
 export type FallbackPlanItem = { id: string; mediaRequirement: MediaRequirement; pillar: string };
-export type FallbackMediaAsset = { id: string; type: MediaType; tags: string[]; createdAt: Date; originalFilename: string };
+export type FallbackMediaAsset = { id: string; type: MediaType; tags: string[]; createdAt: Date; originalFilename: string; origin: MediaAssetOrigin };
 export type FallbackConfirmedFact = { id: string; category: BusinessAttributeCategory; key: string; value: string; source: string; confirmedAt: Date | null };
 export type FallbackVerifiedSocialProof = { id: string; label: string; sourceReference: string; verifiedAt: Date };
 export type FallbackBrand = { businessName: string; hasBrandProfile: boolean };
@@ -67,7 +69,12 @@ const planningTags: ReadonlySet<string> = new Set([...photoFamily, ...videoFamil
 export const informationCategories: readonly BusinessAttributeCategory[] = ["FACT", "PRODUCTS_SERVICES", "DESCRIPTION", "LOCATION_CONTEXT"];
 const maxFactsPerProposal = 3;
 
-const mediaKinds: ReadonlySet<ContentFallbackKind> = new Set(["UNUSED_AUTHENTIC_MEDIA", "OLDER_UNUSED_AUTHENTIC_MEDIA", "REUSABLE_AUTHENTIC_MEDIA", "FORMAT_ADAPTATION"]);
+const mediaKinds: ReadonlySet<ContentFallbackKind> = new Set(["UNUSED_AUTHENTIC_MEDIA", "OLDER_UNUSED_AUTHENTIC_MEDIA", "REUSABLE_AUTHENTIC_MEDIA", "FORMAT_ADAPTATION", "EXISTING_DESIGNED_CREATIVE"]);
+
+/** Creative Campaign çıktısı bir tasarımdır; özgün medya değildir ve özgün medya sıralamasına (1–4) hiç girmez. */
+function isDesignedCreative(asset: { origin: MediaAssetOrigin }) {
+  return asset.origin === "CREATIVE_CAMPAIGN";
+}
 
 export function isMediaFallbackKind(kind: ContentFallbackKind) {
   return mediaKinds.has(kind);
@@ -158,12 +165,17 @@ export function evaluateContentFallback(input: {
   const freshSince = addDaysUtc(input.now, -policy.freshDays);
   const reserved = new Set(input.reservedAssetIds ?? []);
 
-  const candidates: RankedAsset[] = input.assets
+  const usable: RankedAsset[] = input.assets
     .filter((asset) => asset.type === mediaType && !reserved.has(asset.id))
     .map((asset) => ({ ...asset, tagCount: asset.tags.filter((tag) => planningTags.has(tag)).length, usage: input.usage.get(asset.id) ?? { mediaAssetId: asset.id, usageCount: 0, lastUsedAt: null, neverUsed: true } }));
+  // Özgün medya havuzu ile tasarım havuzu ayrıdır: tasarım 1–4. adımlarda aday olamaz, bu yüzden hiçbir tasarım
+  // "özgün medya" gerekçesiyle veya gerçek fotoğraf/video yerine format uyarlamasıyla önerilemez.
+  const candidates = usable.filter((asset) => !isDesignedCreative(asset));
+  const designed = usable.filter(isDesignedCreative);
   const isRecentlyUsed = (asset: RankedAsset) => asset.usage.lastUsedAt !== null && asset.usage.lastUsedAt >= protectedSince;
   const exact = candidates.filter((asset) => asset.tags.includes(requirement));
-  const recentlyUsedCount = exact.filter(isRecentlyUsed).length;
+  const designedExact = designed.filter((asset) => asset.tags.includes(requirement));
+  const recentlyUsedCount = [...exact, ...designedExact].filter(isRecentlyUsed).length;
   const recentNote = recentlyUsedCount ? ` ${recentlyUsedCount} uygun medya son ${policy.reuseProtectionDays} gün içinde kullanıldığı için önerilmedi.` : "";
 
   // 1. Yeni/kullanılmamış özgün medya
@@ -204,6 +216,19 @@ export function evaluateContentFallback(input: {
       kind: "FORMAT_ADAPTATION", mediaAssetId: adaptable.id, targetMediaRequirement: target, sources: [mediaSource(adaptable)],
       rationale: `${requirementLabel} için uygun medya yok; aynı türde (${mediaType === "VIDEO" ? "video" : "fotoğraf"}) "${adaptable.originalFilename}" (${requirementLabels[target].toLocaleLowerCase("tr")}) ile içerik bu formata uyarlanabilir. Kabul edilirse öğenin medya ihtiyacı "${requirementLabels[target]}" olarak güncellenir.${recentNote}`,
     } };
+  }
+
+  // 4b. Hazır tasarım (Creative Campaign çıktısı): yalnızca "Özel tasarım" ihtiyacı için ve açıkça tasarım olarak.
+  // Etiket kuralı tasarımları zaten CUSTOM_GRAPHIC ile sınırlar; buradaki gereksinim kontrolü, olası eski veya
+  // bozuk etiketlere karşı da tasarımın bir fotoğraf/video ihtiyacına önerilmesini engeller.
+  if (requirement === "CUSTOM_GRAPHIC") {
+    const design = designedExact.filter((asset) => !isRecentlyUsed(asset)).sort(compareAdaptation)[0];
+    if (design) {
+      return { reason: "EXISTING_DESIGNED_CREATIVE", proposal: {
+        kind: "EXISTING_DESIGNED_CREATIVE", mediaAssetId: design.id, targetMediaRequirement: "CUSTOM_GRAPHIC", sources: [mediaSource(design)],
+        rationale: `Hazır bir tasarım (grafik) mevcut: "${design.originalFilename}" (${daysBetween(design.createdAt, input.now)} gün önce hazırlandı). Bu bir tasarımdır, gerçek ürün/ekip/mekân fotoğrafı değildir; yalnızca "Özel tasarım" ihtiyacını karşılar.${recentNote}`,
+      } };
+    }
   }
 
   // 5. Onaylı kanonik işletme bilgisi
@@ -279,7 +304,7 @@ async function withSerializationRetry<T>(run: () => Promise<T>): Promise<T> {
 async function loadFallbackInputs(businessId: string, item: ItemWithPlan) {
   const [business, assets, usage, reservedRows, attributes] = await Promise.all([
     prisma.business.findUniqueOrThrow({ where: { id: businessId }, select: { name: true, brandProfile: { select: { id: true } } } }),
-    prisma.mediaAsset.findMany({ where: { businessId }, select: { id: true, type: true, tags: true, createdAt: true, originalFilename: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
+    prisma.mediaAsset.findMany({ where: { businessId }, select: { id: true, type: true, tags: true, createdAt: true, originalFilename: true, origin: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
     summarizeMediaUsage(businessId),
     prisma.contentPlanItem.findMany({ where: { plan: { businessId, status: { not: "SUPERSEDED" } }, status: "ACTIVE", id: { not: item.id }, mediaAssetId: { not: null } }, select: { mediaAssetId: true } }),
     prisma.businessAttribute.findMany({
@@ -362,10 +387,12 @@ async function assertProposalStillValid(tx: Prisma.TransactionClient, proposal: 
 
   if (isMediaFallbackKind(proposal.kind)) {
     if (!proposal.mediaAssetId) throw new StaleProposalError("Önerilen medya artık mevcut değil.");
-    const asset = await tx.mediaAsset.findUnique({ where: { id: proposal.mediaAssetId }, select: { id: true, businessId: true, type: true, tags: true } });
+    const asset = await tx.mediaAsset.findUnique({ where: { id: proposal.mediaAssetId }, select: { id: true, businessId: true, type: true, tags: true, origin: true } });
     if (!asset || asset.businessId !== proposal.businessId) throw new StaleProposalError("Önerilen medya artık mevcut değil.");
     const target = proposal.targetMediaRequirement as StockRequirement;
     if (!asset.tags.includes(target) || asset.type !== mediaTypeForRequirement(target)) throw new StaleProposalError("Önerilen medyanın etiketi değişmiş; gereksinimle artık eşleşmiyor.");
+    if (isDesignedCreative(asset) !== (proposal.kind === "EXISTING_DESIGNED_CREATIVE")) throw new StaleProposalError("Önerilen medyanın türü öneriyle uyuşmuyor; tasarım ve özgün medya ayrı değerlendirilir.");
+    if (proposal.kind === "EXISTING_DESIGNED_CREATIVE" && target !== "CUSTOM_GRAPHIC") throw new StaleProposalError("Hazır tasarım yalnızca özel tasarım ihtiyacını karşılayabilir.");
     const lastUse = await tx.mediaUsage.aggregate({ where: { mediaAssetId: asset.id }, _max: { usedAt: true } });
     if (lastUse._max.usedAt && lastUse._max.usedAt >= addDaysUtc(now, -defaultFallbackPolicy.reuseProtectionDays)) throw new StaleProposalError("Önerilen medya bu arada kullanıldı; yakınlık koruması içinde.");
     const reservedElsewhere = await tx.contentPlanItem.count({ where: { plan: { businessId: proposal.businessId, status: { not: "SUPERSEDED" } }, status: "ACTIVE", id: { not: current.id }, mediaAssetId: asset.id } });

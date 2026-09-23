@@ -47,10 +47,11 @@ When required media is missing, prefer:
 2. Older unused authentic media.
 3. Reusable authentic media with recency protection.
 4. Format adaptation recommendations.
-5. Confirmed business-information content.
-6. Verified social proof, only when real data exists.
-7. Brand creative placeholders.
-8. Future generative creative.
+5. Existing user-accepted designed creative, only for an explicit custom-graphic need and never labeled authentic media.
+6. Confirmed business-information content.
+7. Verified social proof, only when real data exists.
+8. Brand creative placeholders.
+9. Future generative creative.
 
 Never invent products, prices, campaigns, reviews, events, services, or business conditions. Fallback must not silently mutate an approved plan. User acceptance is required.
 
@@ -63,7 +64,7 @@ Never invent products, prices, campaigns, reviews, events, services, or business
 
 ## Visual authenticity
 
-Phase 5 introduces `SAFE_ENHANCE`, `BRAND_STYLE`, and `CREATIVE_CAMPAIGN` as distinct modes. AI may improve lighting, color, contrast, sharpness, noise, crop, perspective, minor distractions, platform composition, and brand presentation. It must not silently invent products, ingredients, portions, views, interiors, people, services, results, or business conditions, or materially alter factual product/service appearance. Authenticity restrictions are domain policy, not prompt wording alone.
+Phase 5 introduces `SAFE_ENHANCE`, `BRAND_STYLE`, `SOCIAL_VARIANT`, and `CREATIVE_CAMPAIGN` as distinct modes. Technical social variants preserve the authenticity of their accepted source; designed creatives are explicitly graphics and cannot satisfy requirements for real product, team, or location photography. AI may improve lighting, color, contrast, sharpness, noise, crop, perspective, minor distractions, platform composition, and brand presentation. It must not silently invent products, ingredients, portions, views, interiors, people, services, results, or business conditions, or materially alter factual product/service appearance. Authenticity restrictions are domain policy, not prompt wording alone.
 
 Visual analysis is media metadata and context. It never becomes canonical Business Brain truth without existing confirmation or explicit user confirmation. Real-provider analysis and development/demo analysis must be visibly distinguishable. Provider output must be normalized and validated before persistence, and re-analysis must preserve an unambiguous current version without event-sourcing complexity.
 
