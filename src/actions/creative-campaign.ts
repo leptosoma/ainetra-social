@@ -64,10 +64,17 @@ export async function keepCreativeCampaignAction(formData: FormData) {
   const currentUserId = await userId();
   let notice = "creative-error";
   try {
-    await keepCreativeCampaign(currentUserId, String(formData.get("campaignId") ?? ""));
+    // Politika açık kabul istiyorsa onay kutusu işaretlenmediğinde alan hiç gelmez ve servis reddeder.
+    await keepCreativeCampaign(currentUserId, String(formData.get("campaignId") ?? ""), {
+      policyAcceptance: formData.get("policyAcceptance") ? String(formData.get("policyAcceptance")) : null,
+    });
     notice = "creative-kept";
   } catch (error) {
-    notice = error instanceof DomainError && error.code === "CONFLICT" ? "creative-decided" : "creative-error";
+    notice = error instanceof DomainError && error.code === "CONFLICT"
+      ? "creative-decided"
+      : error instanceof DomainError && error.code === "VALIDATION_ERROR"
+        ? "creative-policy-blocked"
+        : "creative-error";
   }
   revalidateCreative();
   redirect(`/creative?notice=${notice}`);

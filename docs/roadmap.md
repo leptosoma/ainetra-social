@@ -23,7 +23,7 @@ Completed:
 - P4-04 Content Fallback Engine.
 - P4-05 Phase 4 integration review.
 
-## Phase 5 — Active: Visual Intelligence
+## Phase 5 — Completed: Visual Intelligence
 
 Completed:
 
@@ -31,12 +31,13 @@ Completed:
 - P5-02 Safe Enhance.
 - P5-03 Brand Style.
 - P5-04 Social Variants + Creative Campaign.
-
-Ready:
-
 - P5-05 Phase 5 integration review.
 
 Visual Intelligence must preserve factual reality in authentic media, distinguish authentic enhancement from campaign creative, validate provider output, and require user review before later content use.
+
+P5-05 verified the cross-module authentic derivative and designed-creative flows, tenant isolation, explicit media decisions, Content Stock/Fallback separation, and no implicit content approval or publication. Creative Campaign now resolves a conservative sector policy from the business sector: hospitality, food, or health. Unknown sectors use the strictest profile. All output remains fact-grounded and human-reviewed; health additionally requires an explicit acceptance, and current policies allow deterministic graphic templates only.
+
+The next recommended activity is an **OSS Architecture Spike** to evaluate reusable infrastructure before Phase 5.5 and Phase 6. It is analysis only and has not started.
 
 ## Phase 5.5 — Future: Simple Experience & Calendar Workspace
 

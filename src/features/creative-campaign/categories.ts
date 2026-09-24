@@ -80,12 +80,21 @@ export function selectFactsForCategory(category: CreativeCategory, facts: Candid
     .slice(0, maxFactsPerCreative);
 }
 
+/**
+ * Olgu referansına yazılan değer biçimi. Karar anındaki yeniden doğrulama, kanonik satırın güncel
+ * değerini bu biçime getirip kayıttaki referansla karşılaştırır; böylece yalnızca kısaltma/boşluk
+ * normalleştirmesi yüzünden "bilgi değişti" denmez.
+ */
+export function factRefValue(value: string) {
+  return trimLine(value, 400);
+}
+
 export function toFactRefs(facts: CandidateFact[]): CreativeFactRef[] {
   return facts.map((fact) => creativeFactRefSchema.parse({
     attributeId: fact.id,
     category: fact.category,
     key: fact.key,
-    value: trimLine(fact.value, 400),
+    value: factRefValue(fact.value),
     source: fact.source,
     confirmedAt: fact.confirmedAt?.toISOString() ?? null,
   }));

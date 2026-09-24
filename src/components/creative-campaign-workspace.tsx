@@ -14,6 +14,11 @@ import {
   creativeProvenanceLabels,
   creativeStatusLabels,
 } from "@/features/creative-campaign/labels";
+import {
+  acceptanceCheckboxLabel,
+  creativeRestrictedClaimRules,
+  unrecognizedSectorNote,
+} from "@/features/creative-campaign/sector-policy";
 import type { getCreativeCampaignWorkspace } from "@/features/creative-campaign/service";
 import {
   socialVariantFormatLabels,
@@ -35,7 +40,7 @@ const dateFormat = new Intl.DateTimeFormat("tr-TR", { dateStyle: "medium", timeS
  * olduğu gibi kalır. Bu adım içeriği onaylamaz, planlamaz veya yayınlamaz.
  */
 export function CreativeCampaignWorkspace({ workspace }: { workspace: Workspace }) {
-  const { businessId, formats, categories, backgrounds, awaitingReview, kept, history, pending, latestFailure } = workspace;
+  const { businessId, formats, categories, backgrounds, awaitingReview, kept, history, pending, latestFailure, policy } = workspace;
   const availableCategories = categories.filter((category) => category.available);
   const canCreate = formats.length > 0 && availableCategories.length > 0;
 
@@ -50,6 +55,15 @@ export function CreativeCampaignWorkspace({ workspace }: { workspace: Workspace 
       </div>
       <p className="form-note">{creativeDesignDisclaimer}</p>
       <p className="form-note">{creativeFactPolicyMessage}</p>
+      <p className="form-note">
+        <strong>{policy.label} politikası:</strong> {policy.summary}
+      </p>
+      {!policy.sectorRecognized && <p className="form-note">{unrecognizedSectorNote}</p>}
+      {policy.restrictedClaims.length > 0 && (
+        <p className="form-note">
+          Bu politikada onaylı olsa bile basılmayan iddialar: {policy.restrictedClaims.map((claim) => creativeRestrictedClaimRules[claim].label).join(", ")}.
+        </p>
+      )}
 
       {formats.length === 0 && <div className="alert warning">Bu işletme için tanımlı bir platform oran kuralı yok; tasarım hazırlanamaz.</div>}
 
@@ -87,7 +101,7 @@ export function CreativeCampaignWorkspace({ workspace }: { workspace: Workspace 
                   <small>{category.description}</small>
                   {category.available
                     ? <small>Basılacak bilgi: {category.factPreview.join(" · ")}</small>
-                    : <small>{category.missingReason}</small>}
+                    : <small>{category.blockedReason ?? category.missingReason}</small>}
                 </label>
               ))}
             </div>
@@ -155,6 +169,12 @@ export function CreativeCampaignWorkspace({ workspace }: { workspace: Workspace 
           <div className="enhance-decision">
             <form action={keepCreativeCampaignAction}>
               <input type="hidden" name="campaignId" value={item.id} />
+              {policy.requiresExplicitAcceptance && (
+                <label className="form-note">
+                  <input type="checkbox" name="policyAcceptance" value={policy.key} required />
+                  {acceptanceCheckboxLabel}
+                </label>
+              )}
               <PendingSubmitButton idle="Sakla" pending="Saklanıyor…" className="button primary" />
             </form>
             <form action={discardCreativeCampaignAction}>

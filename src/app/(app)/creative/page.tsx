@@ -19,6 +19,7 @@ const noticeLabels: Record<string, { text: string; tone: "success" | "warning" }
   "creative-kept": { text: "Tasarım kütüphaneye ayrı bir görsel olarak eklendi. Yalnızca özel tasarım ihtiyacına işaretlenebilir; içerik onayı veya yayın değildir.", tone: "success" },
   "creative-discarded": { text: "Tasarım atıldı; kullanılan gerçek görsel olduğu gibi duruyor.", tone: "success" },
   "creative-decided": { text: "Bu tasarım için karar zaten verilmişti.", tone: "warning" },
+  "creative-policy-blocked": { text: "Tasarım saklanmadı: sektörünüz için geçerli kreatif politikası bu tasarımı kabul etmiyor ya da gereken kabul beyanı verilmedi. Tasarım ve işletme bilgileriniz olduğu gibi duruyor.", tone: "warning" },
   "creative-error": { text: "Kreatif işlemi tamamlanamadı.", tone: "warning" },
 };
 

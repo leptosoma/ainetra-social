@@ -2,7 +2,7 @@
 
 ## Active phase
 
-Phase 5 — Visual Intelligence
+Phase 5 — Visual Intelligence complete
 
 ## Done
 
@@ -19,12 +19,11 @@ Phase 5 — Visual Intelligence
 - P5-02 Safe Enhance.
 - P5-03 Brand Style.
 - P5-04 Social Variants + Creative Campaign.
+- P5-05 Phase 5 Integration Review.
 
 ## Ready
 
-### P5-05 — Phase 5 Integration Review
-
-Validate Upload → Analyze → Recommend → Safe Enhance / Brand Style → Platform Variant → User Review → Content workflow, including authenticity, tenancy, versioning, provider honesty, concurrency, and regression.
+No implementation task is ready. The next recommended activity is an OSS Architecture Spike, subject to user approval; it is analysis only.
 
 ## Backlog
 
@@ -32,6 +31,8 @@ Validate Upload → Analyze → Recommend → Safe Enhance / Brand Style → Pla
 - Add timeout/recovery handling for abandoned `PENDING` visual-analysis, Safe Enhance, and Brand Style attempts before asynchronous production providers are introduced.
 - Avoid duplicate Feed/Square actions when an active platform rule recommends 1:1 for both; keep rule provenance and the simple user-facing format names.
 - Improve Creative Campaign notice handling for non-fact validation errors and measure long confirmed text before rendering it into narrow templates.
+- Extend the sector keyword map as more real businesses onboard; unknown sectors deliberately use the strictest policy today.
+- Review how to record the sector policy applied at creative generation without weakening decision-time revalidation. Deterministic restricted-claim phrases are a foundation, not semantic or legal review.
 - Phase 5.5A — Calendar Workspace & Dashboard Simplification. Future only: day/week/month/year calendar, plain action states, a content-day media/help flow, and operational dashboard priorities.
 - Phase 5.5B — Mobile Navigation & Capture-First UX. Future only: phone-first bottom navigation with a prominent capture action, context-aware capture prompts, safe-area support, and thumb-friendly interactions.
 - Ainetra product family architecture — future only: Social, Sales, Serve, Control, and a deliberately small shared Core extracted only from proven cross-product needs.

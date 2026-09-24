@@ -4,7 +4,7 @@ Updated: 2026-09-23
 
 - Branch: `feature/capture-fallback`
 - Verified product baseline: `phase-4-complete`.
-- Validation: 218/218 Vitest tests pass; lint and production build pass; npm audit reports 0 vulnerabilities. The full suite was run directly against the migrated test database. Prisma migrate status and deploy worked on this run.
+- Validation: 237/237 Vitest tests pass; lint (0 warnings), production build, and npm audit (0 vulnerabilities) pass. The full suite was run directly against the migrated test database. Prisma migrate status succeeds for development and test databases.
 - Development and test databases: all 13 migrations applied; `prisma migrate status` reports both schemas up to date.
 - Live Phase 4 validation: Content Stock reports 3/43 for the current 30-day window; 43 current active requirements are counted and 6 superseded-plan items are excluded.
 - Capture reconciliation: all 39 current ACTIVE/MISSING requirements have one CaptureRequest; 34 are open, 5 are expired, with no duplicates or invalid open rows.
@@ -40,6 +40,8 @@ Updated: 2026-09-23
 - Brand Style, composed on the Safe Enhance derivative, validation, provider, and review infrastructure. A versioned visual-style profile is derived from the user-maintained BrandProfile tone preferences into one recommended “Markama göre” choice plus restrained natural/vibrant/premium alternatives with a plain-language rationale; raw preferences never reach the UI. Sources may be an original upload or a kept Safe Enhance derivative, both of which stay immutable, and lineage, BrandProfile identity/snapshot, analysis context, provider provenance, and bounded operations are persisted per attempt. Authenticity outranks style: operations are clamped to a stricter bound for authenticity-sensitive or unverified media and any request outside the closed safe-operation contract is rejected.
 - Social Variants create rule-backed Feed, Story, Reel Cover, or Square image derivatives from accepted authentic media. Local `development-sharp-local` processing uses conservative crop or full-frame contain/padding and is labeled non-AI; it stores platform-rule provenance, source/root lineage, version, and explicit keep/discard. A kept variant becomes a separate authentic MediaAsset without content or publishing approval.
 - Creative Campaign makes clearly labeled designed graphics from canonical confirmed Business Brain facts and optional accepted authentic media. The deterministic `development-template-local` provider is non-generative. Missing facts block creation; fact, brand, and platform-rule snapshots preserve history. Explicit keep creates a MediaAsset tagged only `CUSTOM_GRAPHIC`; it cannot satisfy authentic photo/video requirements. Fallback ranks it as an existing designed creative, separately from authentic media, with recency and plan-version safeguards.
+- Creative Campaign sector policy resolves `HOSPITALITY_STANDARD`, `FOOD_STRICT_AUTHENTIC`, or `HEALTH_STRICT_COMPLIANCE` from `Business.sector`; unknown sectors use the strictest profile. Authenticity and current canonical confirmed facts outrank sector policy, which outranks brand style. All three profiles require explicit keep and disallow generative imagery without semantic output verification. Health limits creative categories, blocks high-risk result claims even when confirmed, and requires an additional acceptance at keep. Keep revalidates the current sector and referenced fact identities/values in the same Serializable transaction.
+- P5-05 integration tests cover upload/analysis/derivative lineage through Social Variant, designed creative separation, Content Stock/Fallback suitability, cross-tenant denial, original and Business Brain immutability, and no implicit approval, scheduling, publishing, or MediaUsage recording. Existing per-feature tests cover versioning, provider honesty, failures, and concurrency.
 
 ## Incomplete modules and debt
 
@@ -50,7 +52,8 @@ Updated: 2026-09-23
 - Safe Enhance and Brand Style are synchronous and have no automatic retry worker; a failed discard remains recoverable through a repeated user action.
 - Brand Style maps tone preferences to pixel adjustments with a small deterministic rule set; it is an explainable product heuristic over user preferences, not a measured visual-identity model.
 - P5-04 local providers are deterministic development implementations; production AI/image providers and measured subject-aware cropping are not configured. Long confirmed text may overflow the narrowest creative templates, and Feed/Square can duplicate a 1:1 choice; these are non-blocking UX follow-ups.
+- Sector classification currently uses a short Turkish/English keyword map. Unknown sectors are intentionally strict; restricted-claim matching uses deterministic phrases and is not a semantic or legal review. The applied policy is re-resolved at keep rather than snapshotted in each historical row.
 
 ## Next task
 
-P5-04 Social Variants + Creative Campaign is complete. P5-05 Phase 5 Integration Review is READY. Phase 5.5A Calendar Workspace & Dashboard Simplification and P5.5B Mobile Navigation & Capture-First UX remain documentation-only future work.
+P5-05 integration review passed; Phase 5 is complete. The next recommended activity is an OSS Architecture Spike for reusable infrastructure, subject to user approval. Phase 5.5A Calendar Workspace & Dashboard Simplification and P5.5B Mobile Navigation & Capture-First UX remain documentation-only future work; neither has started.

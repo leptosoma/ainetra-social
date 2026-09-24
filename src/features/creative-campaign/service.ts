@@ -18,6 +18,7 @@ import { getCreativeRenderProvider, type CreativeRenderProvider } from "./provid
 import {
   buildCreativeCopy,
   creativeCategoryDefinitions,
+  factRefValue,
   selectFactsForCategory,
   toFactRefs,
   type CandidateFact,
@@ -26,12 +27,27 @@ import {
   CREATIVE_CAMPAIGN_VERSION,
   creativeBrandSnapshotSchema,
   creativeCategories,
+  creativeCopySchema,
+  creativeFactRefSchema,
   providerOutputSchema,
   type CreativeBrandSnapshot,
   type CreativeCategory,
   type CreativeCopy,
   type CreativeFactRef,
 } from "./schemas";
+import {
+  assertAuthenticBackground,
+  assertCategoryAllowed,
+  assertClaimsAllowed,
+  assertCopyTracesToConfirmedFacts,
+  assertHumanAcceptance,
+  assertNoSyntheticProductSubstitution,
+  assertProviderAllowed,
+  categoryBlockedReason,
+  resolveCreativeSectorPolicy,
+  sectorPolicyAllowsCategory,
+  type CreativeSectorPolicy,
+} from "./sector-policy";
 
 // P5-04 Kreatif Kampanya. Sosyal Varyant'tan tamamen ayrı bir akıştır: burada üretilen şey TASARIMDIR
 // ve hiçbir yerde gerçek ürün/ekip/mekân fotoğrafı gibi sunulmaz. Kalıcı durumda (ayrı tablo, ayrı
@@ -43,10 +59,21 @@ import {
 //
 // Değişmezlik: factRefs/copy/brandSnapshot/ruleSnapshot birer anlık görüntüdür. Bilgi, kural, metin
 // veya marka tercihi sonradan değişse de üretilmiş çıktı ve kaydı olduğu gibi kalır.
+//
+// Sektör politikası (bkz. `sector-policy.ts`) `Business.sector` alanından deterministik olarak
+// çözülür ve hem oluşturma hem saklama yolunda aynı sırayla uygulanır:
+//   ÖZGÜNLÜK > ONAYLI BİLGİ > SEKTÖR POLİTİKASI > MARKA STİLİ > KREATİF SERBESTLİK
+// Politika kayda yazılmaz; karar anında yeniden çözülür, böylece sektör sonradan değiştiğinde daha
+// dar bir politika saklamayı durdurur ama üretilmiş kayıt ve çıktı hiç değişmez.
 
 export type CreateCreativeCampaignOptions = {
   provider?: CreativeRenderProvider;
   skipRateLimit?: boolean;
+};
+
+export type KeepCreativeCampaignOptions = {
+  /** Politika açık kabul istiyorsa kullanıcının beyanı; politika anahtarına birebir eşit olmalıdır. */
+  policyAcceptance?: string | null;
 };
 
 const maxCreativesPerHour = 20;
@@ -100,6 +127,56 @@ async function readConfirmedFacts(businessId: string): Promise<CandidateFact[]> 
     .map((row) => ({ id: row.id, category: row.category, key: row.key, value: row.value, source: row.source, confirmedAt: row.confirmedAt }));
 }
 
+/** Sektör politikası: karar anında `Business.sector` alanından deterministik olarak çözülür. */
+async function readSectorPolicy(businessId: string): Promise<CreativeSectorPolicy> {
+  const business = await prisma.business.findUnique({ where: { id: businessId }, select: { sector: true } });
+  if (!business) throw new DomainError("İşletme bulunamadı.", "NOT_FOUND");
+  return resolveCreativeSectorPolicy(business.sector);
+}
+
+export const staleFactMessage = "Tasarımdaki bilgilerden biri artık onaylı değil ya da değişti; bu tasarım saklanamaz. Yeni bilgiyle yeni bir tasarım hazırlayabilirsiniz.";
+
+/**
+ * ONAYLI BİLGİ katmanının karar anındaki ayağı: kayıttaki her olgu referansı, HÂLÂ kanonik ve
+ * CONFIRMED olan aynı satıra ve aynı değere karşılık geliyor mu. Sorgu `businessId` ile bağlıdır ve
+ * saklama işleminin İÇİNDE çalışır; böylece bilgi karar ile yazma arasında geri çekilirse ya da
+ * değiştirilirse tasarım saklanmaz. Üretilmiş kayıt ve çıktı baytları bu redde rağmen değişmez.
+ */
+async function assertFactRefsStillConfirmed(tx: Prisma.TransactionClient, businessId: string, factRefs: readonly CreativeFactRef[]) {
+  const rows = await tx.businessAttribute.findMany({
+    where: {
+      businessId,
+      id: { in: factRefs.map((ref) => ref.attributeId) },
+      isCanonical: true,
+      verificationStatus: "CONFIRMED",
+    },
+    select: { id: true, value: true },
+  });
+  const current = new Map(rows.map((row) => [row.id, row.value]));
+  for (const ref of factRefs) {
+    const value = current.get(ref.attributeId);
+    if (typeof value !== "string" || factRefValue(value) !== ref.value) {
+      throw new DomainError(staleFactMessage, "VALIDATION_ERROR");
+    }
+  }
+}
+
+/** Kayda geçmiş anlık görüntüyü sözleşmeye göre okur; uyumsuz kayıt null döner, ham yük sızmaz. */
+function readStoredCopy(value: unknown): CreativeCopy | null {
+  const parsed = creativeCopySchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+function readStoredFactRefs(value: unknown): CreativeFactRef[] {
+  if (!Array.isArray(value)) return [];
+  const refs: CreativeFactRef[] = [];
+  for (const entry of value) {
+    const parsed = creativeFactRefSchema.safeParse(entry);
+    if (parsed.success) refs.push(parsed.data);
+  }
+  return refs;
+}
+
 async function readBrandSnapshot(businessId: string): Promise<{ snapshot: CreativeBrandSnapshot; palette: BrandPalette; profileId: string | null; profileUpdatedAt: Date | null; businessName: string }> {
   const business = await prisma.business.findUnique({
     where: { id: businessId },
@@ -126,24 +203,32 @@ export type CreativeCategoryOption = {
   category: CreativeCategory;
   label: string;
   description: string;
-  /** Onaylı bilgi var mı; yoksa kreatif hazırlanmaz. */
+  /** Onaylı bilgi var mı ve sektör politikası bu türü açık bırakıyor mu. */
   available: boolean;
   /** Hangi bilginin eksik olduğu; hazırlanabilir kategorilerde null. */
   missingReason: string | null;
+  /** Sektör politikası bu türü kapattıysa tam gerekçe; aksi hâlde null. */
+  blockedReason: string | null;
   /** Tasarıma basılacak onaylı bilgi metinleri (önizleme). */
   factPreview: string[];
 };
 
-function categoryOptions(facts: CandidateFact[]): CreativeCategoryOption[] {
+/**
+ * Tür listesi iki kapıdan geçer: onaylı bilgi (üst katman) ve sektör politikası (alt katman).
+ * Politika kapattığı bir türde bilgi önizlemesi de göstermez; o türden bir tasarım hiç hazırlanmaz.
+ */
+function categoryOptions(facts: CandidateFact[], policy: CreativeSectorPolicy): CreativeCategoryOption[] {
   return creativeCategories.map((category) => {
     const definition = creativeCategoryDefinitions[category];
-    const selected = selectFactsForCategory(category, facts);
+    const allowed = sectorPolicyAllowsCategory(policy, category);
+    const selected = allowed ? selectFactsForCategory(category, facts) : [];
     return {
       category,
       label: definition.label,
       description: definition.description,
-      available: selected.length > 0,
-      missingReason: selected.length ? null : definition.missingReason,
+      available: allowed && selected.length > 0,
+      missingReason: !allowed || selected.length ? null : definition.missingReason,
+      blockedReason: allowed ? null : categoryBlockedReason(policy, category),
       factPreview: selected.map((fact) => fact.value),
     };
   });
@@ -197,16 +282,34 @@ export async function createCreativeCampaign(
     if (recent >= maxCreativesPerHour) throw new DomainError(`Bir saat içinde en fazla ${maxCreativesPerHour} kreatif hazırlayabilirsiniz.`, "VALIDATION_ERROR");
   }
 
-  // Olgu kapısı: onaylı bilgi yoksa burada durulur ve eksik bilgi açıkça söylenir. Hiçbir metin uydurulmaz.
+  // Kapılar öncelik sırasına göre açılır: ÖZGÜNLÜK > ONAYLI BİLGİ > SEKTÖR POLİTİKASI > MARKA STİLİ
+  // > KREATİF SERBESTLİK. Üst katman reddettiğinde alttaki hiç değerlendirilmez.
+  const policy = await readSectorPolicy(businessId);
+  const provider = options.provider ?? getCreativeRenderProvider();
+
+  // 1) ÖZGÜNLÜK: arka plan yalnızca kabul edilmiş gerçek medya olabilir, izi çözülebilmelidir ve
+  // bu sektörde üretken bir sağlayıcı kullanılamıyorsa sentetik görsel üretilmez.
+  const background = options.sourceAssetId ? await resolveBackground(userId, businessId, options.sourceAssetId) : null;
+  assertAuthenticBackground(policy, background);
+  assertProviderAllowed(policy, provider);
+
+  // 2) ONAYLI BİLGİ: onaylı bilgi yoksa burada durulur ve eksik bilgi açıkça söylenir. Hiçbir metin uydurulmaz.
   const facts = selectFactsForCategory(category, await readConfirmedFacts(businessId));
   if (!facts.length) throw new DomainError(creativeCategoryDefinitions[category].missingReason, "VALIDATION_ERROR");
 
+  // 3) SEKTÖR POLİTİKASI: tür bu sektörde açık mı ve yasaklı bir iddia var mı. Bilgi ONAYLI olsa bile
+  // yasaklı iddia geçmez; onay, iddianın Ainetra için doğrulanabilir olduğu anlamına gelmez.
+  assertCategoryAllowed(policy, category);
+  assertClaimsAllowed(policy, facts.map((fact) => fact.value));
+
+  // 4) MARKA STİLİ: renk ve ad yalnızca üst katmanların izin verdiği metnin üstüne uygulanır.
   const brand = await readBrandSnapshot(businessId);
+
+  // 5) KREATİF SERBESTLİK: yok. Metin yalnızca olgulardan kurulur ve her satırın karşılığı doğrulanır.
   const copy = buildCreativeCopy(brand.businessName, facts);
   const factRefs = toFactRefs(facts);
+  assertCopyTracesToConfirmedFacts(copy, factRefs);
   const canvas = creativeCanvasFor(target.targetRatio);
-  const background = options.sourceAssetId ? await resolveBackground(userId, businessId, options.sourceAssetId) : null;
-  const provider = options.provider ?? getCreativeRenderProvider();
 
   // 1) Aktif işi talep et ya da yeni sürüm aç. Eşzamanlı aynı istek burada mevcut denemeye düşer.
   const claim = await withConflictRetry(() => prisma.$transaction(async (tx) => {
@@ -319,21 +422,51 @@ export async function createCreativeCampaign(
  * "Sakla": tasarımı ayrı bir MediaAsset yapar. Köken CREATIVE_CAMPAIGN'dir ve etiket yalnızca
  * CUSTOM_GRAPHIC olabilir; bu yüzden gerçek fotoğraf/video kanıtı isteyen bir medya gereksinimini
  * karşılayamaz. Kullanılan gerçek medya varsa soy açıkça bağlanır ama çıktı yine tasarımdır.
+ *
+ * Bu adım aynı zamanda politikanın ZORUNLU insan incelemesidir. Politika oluşturma anına
+ * hapsedilmez: karar anında yeniden çözülür, bu yüzden sektör sonradan daralmışsa (ör. işletme
+ * sağlık olarak güncellenmişse) eski bir tasarım saklanamaz. Sağlık politikasında ayrıca açık bir
+ * kabul beyanı istenir; beyan gelmezse hiçbir medya varlığı oluşmaz.
+ *
+ * Bu yeniden sınama tamamen işlemin İÇİNDEDİR (güncel sektör, tür, yasaklı iddia ve olguların
+ * kendisi). Aksi hâlde sınama ile yazma arasında kalan boşlukta bilgi geri çekilebilir, değişebilir
+ * ya da sektör daralabilir ve tasarım yine de saklanabilirdi. Red hâlinde MediaAsset oluşmaz;
+ * üretilmiş kayıt ve çıktı baytları hiç değişmez, zaten KEPT olan bir karar ise idempotent döner.
  */
-export async function keepCreativeCampaign(userId: string, campaignId: string) {
+export async function keepCreativeCampaign(userId: string, campaignId: string, options: KeepCreativeCampaignOptions = {}) {
   const campaign = await requireCampaign(userId, campaignId);
   if (campaign.status === "PENDING") throw new DomainError("Kreatif hâlâ hazırlanıyor.", "CONFLICT");
   if (campaign.status !== "SUCCEEDED" || !campaign.outputStorageKey) throw new DomainError("Bu deneme için saklanabilir bir sonuç yok.", "CONFLICT");
   if (campaign.decision === "DISCARDED") throw new DomainError("Bu sonuç zaten atıldı.", "CONFLICT");
 
   return withConflictRetry(() => prisma.$transaction(async (tx) => {
-    const current = await tx.mediaCreativeCampaign.findUnique({ where: { id: campaign.id }, include: { business: { select: { name: true } } } });
+    const current = await tx.mediaCreativeCampaign.findUnique({
+      where: { id: campaign.id },
+      include: { business: { select: { name: true, sector: true } } },
+    });
     if (!current) throw new DomainError("Kreatif bu sırada silindi.", "NOT_FOUND");
+    // Verilmiş karar yeniden sınanmaz: "Sakla" idempotenttir, ikinci çağrı aynı kaydı döner.
     if (current.decision === "KEPT") return current;
     if (current.decision) throw new DomainError("Bu sonuç zaten atıldı.", "CONFLICT");
     if (current.status !== "SUCCEEDED" || !current.outputStorageKey || !current.outputMimeType || current.outputSize === null) {
       throw new DomainError("Bu deneme için saklanabilir bir sonuç yok.", "CONFLICT");
     }
+
+    // Saklama yolu da aynı öncelik sırasını uygular; oluşturmada geçen bir kayıt burada, yazmayla
+    // aynı işlemin içinde ve güncel duruma göre yeniden sınanır.
+    const policy = resolveCreativeSectorPolicy(current.business.sector);
+    const storedCopy = readStoredCopy(current.copy);
+    if (!storedCopy) throw new DomainError("Tasarımın metin kaydı okunamadı; bu sonuç saklanamaz.", "CONFLICT");
+    const factRefs = readStoredFactRefs(current.factRefs);
+    // ONAYLI BİLGİ: kayıttaki her satırın olgu karşılığı duruyor mu ve o olgular hâlâ kanonik ve
+    // ONAYLI mı, değerleri değişmiş mi.
+    assertCopyTracesToConfirmedFacts(storedCopy, factRefs);
+    await assertFactRefsStillConfirmed(tx, current.businessId, factRefs);
+    // SEKTÖR POLİTİKASI: karar anındaki politika bu türü ve bu iddiaları kabul ediyor mu.
+    assertCategoryAllowed(policy, current.category);
+    assertClaimsAllowed(policy, storedCopy.lines);
+    assertHumanAcceptance(policy, options.policyAcceptance);
+
     const extension = outputExtensions[current.outputMimeType] ?? "png";
     const outputAsset = await tx.mediaAsset.create({
       data: {
@@ -350,6 +483,9 @@ export async function keepCreativeCampaign(userId: string, campaignId: string) {
         tags: [...creativeOutputTags],
       },
     });
+    // ÖZGÜNLÜK: hiçbir sektörde tasarım çıktısı gerçek fotoğraf kanıtının yerine geçmez. Bu denetim
+    // işlem içindedir; geçmezse varlık oluşmaz ve karar yazılmaz.
+    assertNoSyntheticProductSubstitution(outputAsset);
     return tx.mediaCreativeCampaign.update({
       where: { id: current.id },
       data: { decision: "KEPT", decidedById: userId, decidedAt: new Date(), outputAssetId: outputAsset.id },
@@ -423,10 +559,11 @@ export type CreativeFormatChoice = {
 /** "Bunu nerede kullanacaksınız?" + "Ne hazırlayalım?" ekranı. Yalnızca gerçek bağlamın izin verdiği seçenekler. */
 export async function getCreativeCampaignWorkspace(userId: string, businessId: string) {
   await requireMembership(userId, businessId);
-  const [rules, facts, brand, rows, backgroundAssets] = await Promise.all([
+  const [rules, facts, brand, policy, rows, backgroundAssets] = await Promise.all([
     getActivePlatformRules(userId, businessId),
     readConfirmedFacts(businessId),
     readBrandSnapshot(businessId),
+    readSectorPolicy(businessId),
     prisma.mediaCreativeCampaign.findMany({ where: { businessId }, select: reviewSelect, orderBy: { version: "desc" } }),
     prisma.mediaAsset.findMany({
       where: { businessId, type: "IMAGE", origin: { in: ["UPLOAD", "SAFE_ENHANCE", "BRAND_STYLE", "SOCIAL_VARIANT"] } },
@@ -452,7 +589,17 @@ export async function getCreativeCampaignWorkspace(userId: string, businessId: s
     businessName: brand.businessName,
     brand: brand.snapshot,
     formats,
-    categories: categoryOptions(facts),
+    /** Uygulanan sektör politikası; ekranda hangi kuralın geçerli olduğu açıkça yazar. */
+    policy: {
+      key: policy.key,
+      label: policy.label,
+      summary: policy.summary,
+      sectorRecognized: policy.sectorRecognized,
+      requiresExplicitAcceptance: policy.requiresExplicitAcceptance,
+      authenticityStrictness: policy.authenticityStrictness,
+      restrictedClaims: policy.restrictedClaims,
+    },
+    categories: categoryOptions(facts, policy),
     backgrounds: backgroundAssets.filter((asset) => supportedSourceFormats.has(asset.mimeType)),
     awaitingReview: rows.filter((row) => row.status === "SUCCEEDED" && row.decision === null).map(toReviewItem),
     kept: rows.filter((row) => row.decision === "KEPT").map(toReviewItem),
