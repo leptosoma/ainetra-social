@@ -28,6 +28,27 @@ enum SocialAccountStatus {
   DISCONNECTED
 }
 
+enum MetaOAuthAttemptStatus {
+  PENDING
+  PROCESSING
+  AWAITING_SELECTION
+  SELECTING
+  COMPLETED
+  FAILED
+}
+
+enum MetaConnectionAuditAction {
+  CONNECT_STARTED
+  CALLBACK_FAILED
+  ASSETS_DISCOVERED
+  SELECTION_FAILED
+  CONNECTED
+  RECONNECTED
+  VALIDATED
+  REAUTH_REQUIRED
+  DISCONNECTED
+}
+
 enum MediaType {
   IMAGE
   VIDEO
@@ -398,6 +419,9 @@ model User {
   updatedAt                   DateTime                  @updatedAt
   memberships                 Membership[]
   sessions                    Session[]
+  metaOAuthAttempts           MetaOAuthAttempt[]        @relation("MetaOAuthAttemptUser")
+  metaConnections             MetaConnection[]          @relation("MetaConnectionConnectedBy")
+  metaConnectionAudits        MetaConnectionAudit[]     @relation("MetaConnectionAuditActor")
   approvals                   Approval[]
   analysisRuns                BusinessAnalysisRun[]     @relation("AnalysisTriggeredBy")
   confirmedBusinessAttributes BusinessAttribute[]       @relation("AttributeConfirmedBy")
@@ -423,6 +447,7 @@ model Session {
   expiresAt DateTime
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  metaOAuthAttempts MetaOAuthAttempt[]
 
   @@index([userId])
   @@index([expiresAt])
@@ -461,6 +486,9 @@ model Business {
   socialVariants    MediaSocialVariant[]
   creativeCampaigns MediaCreativeCampaign[]
   publishIntents    PublishIntent[]
+  metaOAuthAttempts MetaOAuthAttempt[]
+  metaConnections   MetaConnection[]
+  metaConnectionAudits MetaConnectionAudit[]
 }
 
 model ContentPlanningRun {
@@ -720,7 +748,12 @@ model SocialAccount {
   business          Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
   scheduledPosts    ScheduledPost[]
   publishIntents    PublishIntent[]
+  metaConnection    MetaConnection?
+  metaOAuthReconnects MetaOAuthAttempt[] @relation("MetaOAuthReconnectTarget")
+  metaConnectionAudits MetaConnectionAudit[]
 
+  // Sağlayıcı kimliği boşsa değil, doluysa (businessId, platform, externalAccountId) benzersizdir; kısmi
+  // benzersiz indeks P6-02 migration'ında SQL ile tanımlıdır (legacy null kimlikli satırlar korunur).
   @@index([businessId])
 }
 
@@ -1300,4 +1333,103 @@ model MediaCreativeCampaign {
   @@index([ruleId])
   @@index([triggeredById])
   @@index([decidedById])
+}
+
+/// P6-02: tek kullanımlık Meta OAuth denemesi (CONNECTING). Yalnızca state/seçim tutamacının hash'i saklanır.
+/// Seçim bekleyen Page kimlik bilgileri şifreli, kısa ömürlü ve bu denemeye bağlıdır; seçimde, hatada veya
+/// süre dolduğunda silinir.
+model MetaOAuthAttempt {
+  id                       String                 @id @default(cuid())
+  businessId               String
+  userId                   String
+  sessionId                String
+  stateHash                String                 @unique
+  status                   MetaOAuthAttemptStatus @default(PENDING)
+  reconnectSocialAccountId String?
+  expiresAt                DateTime
+  consumedAt               DateTime?
+  selectionHandleHash      String?                @unique
+  selectionExpiresAt       DateTime?
+  candidates               Json?
+  grantedScopes            String[]               @default([])
+  pendingCiphertext        Bytes?
+  pendingNonce             Bytes?
+  pendingAuthTag           Bytes?
+  pendingKeyId             String?
+  completedAt              DateTime?
+  failedAt                 DateTime?
+  failureCode              String?
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+  business                 Business               @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user                     User                   @relation("MetaOAuthAttemptUser", fields: [userId], references: [id], onDelete: Cascade)
+  session                  Session                @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  reconnectSocialAccount   SocialAccount?         @relation("MetaOAuthReconnectTarget", fields: [reconnectSocialAccountId], references: [id], onDelete: SetNull)
+  audits                   MetaConnectionAudit[]
+
+  @@index([businessId, createdAt])
+  @@index([userId])
+  @@index([sessionId])
+  @@index([expiresAt])
+}
+
+/// P6-02: seçilen SocialAccount için Ainetra'ya ait Meta bağlantı meta verisi ve şifreli kimlik bilgisi sınırı.
+/// Şifreli metin/nonce/tag/anahtar sürümü yalnızca sunucuda okunur; ham token hiçbir zaman saklanmaz.
+model MetaConnection {
+  id                  String         @id @default(cuid())
+  businessId          String
+  socialAccountId     String         @unique
+  platform            SocialPlatform
+  providerAccountId   String
+  metaPageId          String
+  instagramAccountId  String?
+  pageName            String
+  instagramUsername   String?
+  grantedScopes       String[]       @default([])
+  pageTasks           String[]       @default([])
+  tokenType           String?
+  credentialRef       String?        @unique
+  ciphertext          Bytes?
+  nonce               Bytes?
+  authTag             Bytes?
+  keyId               String?
+  tokenExpiresAt      DateTime?
+  dataAccessExpiresAt DateTime?
+  connectedAt         DateTime
+  lastValidatedAt     DateTime?
+  reauthRequiredAt    DateTime?
+  reauthReason        String?
+  disconnectedAt      DateTime?
+  providerRevocation  String?
+  connectedByUserId   String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  business            Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  socialAccount       SocialAccount  @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  connectedBy         User?          @relation("MetaConnectionConnectedBy", fields: [connectedByUserId], references: [id], onDelete: SetNull)
+
+  // Aynı Meta varlığının yalnızca bir canlı eşlemesi olabilir; kısmi benzersiz indeks migration'dadır.
+  @@index([businessId])
+  @@index([platform, providerAccountId])
+}
+
+/// P6-02: bağlantı denetim izi. Yalnızca kapalı eylem/sonuç kodları; token, kod veya ham sağlayıcı yükü yok.
+model MetaConnectionAudit {
+  id              String                    @id @default(cuid())
+  businessId      String
+  socialAccountId String?
+  attemptId       String?
+  actorUserId     String?
+  action          MetaConnectionAuditAction
+  result          String
+  reason          String?
+  createdAt       DateTime                  @default(now())
+  business        Business                  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  socialAccount   SocialAccount?            @relation(fields: [socialAccountId], references: [id], onDelete: SetNull)
+  attempt         MetaOAuthAttempt?         @relation(fields: [attemptId], references: [id], onDelete: SetNull)
+  actor           User?                     @relation("MetaConnectionAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([businessId, createdAt])
+  @@index([socialAccountId])
+  @@index([attemptId])
 }

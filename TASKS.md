@@ -2,7 +2,7 @@
 
 ## Active phase
 
-Phase 6 — Publishing IN PROGRESS. P6-01 Publishing Domain Foundation is DONE; Phase 6 is not complete. Phase 5.5 is COMPLETE.
+Phase 6 — Publishing IN PROGRESS. P6-01 Publishing Domain Foundation and P6-02 Meta Account Connection are DONE; Phase 6 is not complete. Phase 5.5 is COMPLETE.
 
 ## Done
 
@@ -24,10 +24,11 @@ Phase 6 — Publishing IN PROGRESS. P6-01 Publishing Domain Foundation is DONE; 
 - P5.5B Mobile Navigation & Capture-First UX. DONE.
 - Phase 5.5 Simple Experience & Calendar Workspace. COMPLETE.
 - P6-01 Publishing Domain Foundation. DONE.
+- P6-02 Meta Account Connection. DONE.
 
 ## Ready
 
-- P6-02 Meta Account Connection. READY; planning packet: `claude-tasks/P6-02-meta-account-connection.md`. Implementation not started.
+- P6-03 Native Meta Submission. Planned; needs a task packet and explicit go-ahead.
 
 ## Backlog
 
@@ -42,4 +43,5 @@ Phase 6 — Publishing IN PROGRESS. P6-01 Publishing Domain Foundation is DONE; 
 - Field-test native `capture` file inputs on real iOS Safari and Android Chrome (permissions, cancellation, orientation, HEIC-to-JPEG conversion, interrupted large video uploads); automated checks used Chromium device emulation only.
 - The layout's capture prompt reads existing CaptureRequests read-only; a plan whose requests have not yet been reconciled shows its prompt after the next dashboard/content-plan load.
 - P6-01 follow-ups for later Phase 6 tasks: nothing enqueues publish intents yet (`requestPublishIntent` is invoked only by tests until P6-03/P6-04 flows call it); `CONNECTED` remains a placeholder and P6-02/P6-03 must validate the real credential at delivery; the adapter contract has no implementation; claiming/leasing, retry budget, and reconciliation loops are P6-04/P6-05. Local P6-01 validation ran on PostgreSQL 16 because PostgreSQL 17/Docker were unavailable in that environment.
+- P6-02 follow-ups: live Meta validation has not been performed (no Meta app credentials in the build environment); OAuth, discovery, selection, reconnect and disconnect were verified with a deterministic fake Graph client and a harness-only fetch mock. Before onboarding non-role customers, confirm Live mode, Advanced Access/App Review for `pages_show_list`, `instagram_basic`, `pages_read_engagement`, Business Verification if Meta requires it, the redirect domain, privacy policy and data-deletion callback, and run a provider test with a non-role account. Business Manager-granted Page roles may additionally need `ads_read`/`ads_management`; these are not requested and such users currently get an honest validation failure. Meta deauthorization/data-deletion webhooks are not implemented, so provider-side revocation is detected only by explicit validation (and must be rechecked at P6-03 dispatch). Disconnect removes the local credential only; provider-side revocation is not requested because app-level deauthorization would affect the Meta user's other connections. `requestPublishIntent` still checks `SocialAccount.status` only; P6-03 must resolve the credential through `getMetaAccountConnection` and revalidate it. Pending attempts expire after 10 minutes and are purged on the next connection start or selection access; there is no scheduled sweeper. Settings keeps using the first business membership as before.
 - Phase 7 Analytics + Learning.

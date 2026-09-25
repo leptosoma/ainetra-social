@@ -23,7 +23,8 @@ export async function createSession(userId: string) {
   });
 }
 
-export async function getCurrentUser() {
+/** Geçerli sunucu oturumu ve kullanıcısı; OAuth denemesini aynı canlı oturuma bağlamak için gerekir. */
+export async function getCurrentSession() {
   const token = (await cookies()).get(COOKIE_NAME)?.value;
   if (!token) return null;
   const session = await prisma.session.findUnique({
@@ -31,7 +32,11 @@ export async function getCurrentUser() {
     include: { user: true },
   });
   if (!session || session.expiresAt <= new Date()) return null;
-  return session.user;
+  return session;
+}
+
+export async function getCurrentUser() {
+  return (await getCurrentSession())?.user ?? null;
 }
 
 export async function destroyCurrentSession() {
