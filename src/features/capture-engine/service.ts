@@ -235,3 +235,32 @@ export async function dismissCaptureRequest(userId: string, captureRequestId: st
     data: { status: "DISMISSED" as CaptureRequestStatus, dismissedAt: new Date(), dismissedById: userId },
   });
 }
+
+/**
+ * P5.5B: mobil çekim yüzeyinin (Bugün kartı ve merkez çekim düğmesi) okuduğu GÜNCEL çekim işleri.
+ * SALT OKUR: uzlaştırma/süre doldurma yazmaz; bu yüzden her sayfa yüklemesinde güvenle çağrılabilir.
+ * Uzlaştırılmamış eski satırlar da burada sorgu düzeyinde elenir:
+ *  - yalnızca bu işletmenin OPEN istekleri (kiracı sınırı sorguda ve öğenin planında iki kez),
+ *  - vade günü işletme-yerel bugünden önce değil (süresi dolmuş iş "güncel" gösterilmez),
+ *  - öğe ACTIVE, planı SUPERSEDED değil, medya hâlâ MISSING ve öğenin ihtiyacı isteğinkiyle aynı
+ *    (değiştirilmiş/yerine konmuş öğenin eski isteği güncel iş değildir).
+ */
+export async function listCurrentCaptureRequests(userId: string, businessId: string, options: { now?: Date; days?: number; limit?: number } = {}) {
+  await requireMembership(userId, businessId);
+  const business = await prisma.business.findUniqueOrThrow({ where: { id: businessId }, select: { timezone: true } });
+  const today = calendarDayUtc(options.now ?? new Date(), business.timezone);
+  const rows = await prisma.captureRequest.findMany({
+    where: {
+      businessId,
+      status: "OPEN",
+      dueAt: { gte: today, lt: addDaysUtc(today, options.days ?? 7) },
+      contentPlanItem: { status: "ACTIVE", mediaAvailability: "MISSING", mediaAssetId: null, plan: { businessId, status: { not: "SUPERSEDED" } } },
+    },
+    orderBy: [{ dueAt: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+    include: { contentPlanItem: { select: { mediaRequirement: true, platform: true, contentType: true, plannedDate: true, recommendedTime: true, topic: true } } },
+  });
+  const current = rows.filter((request) => request.contentPlanItem.mediaRequirement === request.mediaRequirement);
+  return options.limit ? current.slice(0, options.limit) : current;
+}
+
+export type CurrentCaptureRequest = Awaited<ReturnType<typeof listCurrentCaptureRequests>>[number];

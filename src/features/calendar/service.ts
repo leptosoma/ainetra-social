@@ -8,13 +8,17 @@ import {
   addCalendarDays,
   buildCalendarProjection,
   calendarRange,
+  groupCalendarEventsByDay,
+  mobileCalendarRange,
   startOfCalendarWeek,
   summarizeCalendarEvents,
   zonedDay,
   zonedDayStart,
   type CalendarCounts,
+  type CalendarDayGroup,
   type CalendarEvent,
   type CalendarView,
+  type MobileCalendarView,
   type ProjectionPlanItem,
   type ProjectionScheduledPost,
 } from "./projection";
@@ -265,5 +269,67 @@ export async function getCalendarWeekSummary(
     weekEnd: addCalendarDays(to, -1),
     counts: summarizeCalendarEvents(events),
     nextActions: events.filter((event) => event.requiresUserAction).slice(0, options.maxActions ?? 3),
+  };
+}
+
+async function loadRangeEvents(business: { id: string; timezone: string }, range: { from: string; to: string }, today: string) {
+  const inputs = await loadProjectionInputs(business.id, range, business.timezone);
+  return buildCalendarProjection({ businessId: business.id, timeZone: business.timezone, today, range, ...inputs });
+}
+
+export type MobileCalendarWorkspace = {
+  timezone: string;
+  today: string;
+  view: MobileCalendarView;
+  anchor: string;
+  range: { from: string; to: string };
+  events: CalendarEvent[];
+  days: CalendarDayGroup[];
+  counts: CalendarCounts;
+};
+
+/** P5.5B: telefon takvimi. Masaüstü ile aynı üyelik, kiracı, plan sürümü ve saat dilimi kuralları. */
+export async function getMobileCalendar(
+  userId: string,
+  businessId: string,
+  options: { view?: MobileCalendarView; anchor?: string; now?: Date } = {},
+): Promise<MobileCalendarWorkspace> {
+  await requireMembership(userId, businessId);
+  const business = await loadBusiness(businessId);
+  const today = zonedDay(options.now ?? new Date(), business.timezone);
+  const view = options.view ?? "day";
+  const anchor = options.anchor ?? today;
+  const range = mobileCalendarRange(view, anchor);
+  const events = await loadRangeEvents(business, range, today);
+  return { timezone: business.timezone, today, view, anchor, range, events, days: groupCalendarEventsByDay(events, range), counts: summarizeCalendarEvents(events) };
+}
+
+export type TodayAgenda = {
+  timezone: string;
+  today: string;
+  /** İşletme-yerel bugünün olayları. */
+  todayEvents: CalendarEvent[];
+  todayCounts: CalendarCounts;
+  /** Bugünden sonraki günlerde (varsayılan 7 gün) sizden bir şey bekleyen ilk olaylar. */
+  upcomingActions: CalendarEvent[];
+};
+
+/** P5.5B: mobil Bugün yüzeyi; takvimle aynı izdüşüm, işletme saat dilimindeki bugün. */
+export async function getTodayAgenda(
+  userId: string,
+  businessId: string,
+  options: { now?: Date; days?: number; maxActions?: number } = {},
+): Promise<TodayAgenda> {
+  await requireMembership(userId, businessId);
+  const business = await loadBusiness(businessId);
+  const today = zonedDay(options.now ?? new Date(), business.timezone);
+  const events = await loadRangeEvents(business, { from: today, to: addCalendarDays(today, options.days ?? 7) }, today);
+  const todayEvents = events.filter((event) => event.date === today);
+  return {
+    timezone: business.timezone,
+    today,
+    todayEvents,
+    todayCounts: summarizeCalendarEvents(todayEvents),
+    upcomingActions: events.filter((event) => event.date > today && event.requiresUserAction).slice(0, options.maxActions ?? 3),
   };
 }

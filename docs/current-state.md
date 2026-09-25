@@ -2,9 +2,9 @@
 
 Updated: 2026-09-25
 
-- Branch: `feature/capture-fallback`
+- Branch: `cloud/p5-5b-mobile`; tag `phase-5.5-complete`.
 - Verified product baseline: `phase-4-complete`.
-- Validation: 263/263 Vitest tests pass, including 26 targeted calendar tests; lint, production build, and npm audit (0 vulnerabilities) pass. Prisma migrate status succeeds for development and test databases.
+- Validation (P5.5B): 281/281 Vitest tests pass, including 18 new mobile/capture tests and the 26 P5.5A calendar tests; lint, production build, and npm audit (0 vulnerabilities) pass. Prisma validate, migrate status (development and test), and schema-vs-database diff report no drift. A Playwright/Chromium session on iPhone 13, Pixel 5, 1024px tablet, and 1366px desktop viewports passed 44/44 checks (dock, safe spacing, sheet focus/Escape, contextual upload, calendar views, drawer, desktop regression).
 - Development and test databases: all 13 migrations applied; `prisma migrate status` reports both schemas up to date.
 - Live Phase 4 validation: Content Stock reports 3/43 for the current 30-day window; 43 current active requirements are counted and 6 superseded-plan items are excluded.
 - Capture reconciliation: all 39 current ACTIVE/MISSING requirements have one CaptureRequest; 34 are open, 5 are expired, with no duplicates or invalid open rows.
@@ -44,6 +44,8 @@ Updated: 2026-09-25
 - P5-05 integration tests cover upload/analysis/derivative lineage through Social Variant, designed creative separation, Content Stock/Fallback suitability, cross-tenant denial, original and Business Brain immutability, and no implicit approval, scheduling, publishing, or MediaUsage recording. Existing per-feature tests cover versioning, provider honesty, failures, and concurrency.
 - P5.5A Calendar Workspace uses FullCalendar Standard/MIT 6.1.21 for day, week, month, and year layout. Ainetra's read-only projection joins current ACTIVE plan items with tenant-scoped scheduled posts, merges linked work once at the scheduled business-local date, and carries media needs, current approval/version checks, and capture guidance into plain Turkish event states. The drawer routes to existing upload, content, media, and fallback actions without implicit plan, approval, reschedule, or publishing mutations. The dashboard uses the same projection for weekly planned/ready/action counts and next tasks.
 
+- P5.5B Mobile Navigation & Capture-First UX: at ≤820px the desktop sidebar is replaced by a slim top bar with an `İşletmem` menu (İçerik Planı, Kreatif, Marka, Sosyal Strateji, Business Brain, Ayarlar, sign-out) and a safe-area-aware bottom dock (Bugün, Takvim, central capture, İçerikler, Medya); both read one shared route list so no capability is lost. The capture sheet offers the current CaptureRequest first (e.g. “Cuma gönderisi için fotoğraf çek” with its sector guidance), then Fotoğraf çek / Video çek / Galeriden yükle via native file inputs with `capture="environment"` and gallery fallback, and `Ainetra ile içerik hazırla` routing to the existing content-plan/fallback flow. Contextual uploads send only the CaptureRequest id; the server derives business, tag, and media type, rejects stale/closed/expired or other-tenant requests, then uses the existing media validation and fulfilment. Current capture work is read-only and excludes replaced, superseded, requirement-changed, fulfilled, dismissed, or past-due (business-local) requests. Mobile Bugün uses the calendar projection for business-local today plus upcoming actions. The mobile calendar offers Gün/3 gün/Hafta/Ay (concise month with status dots) from the same projection and shares the event drawer as a bottom sheet; FullCalendar mounts only above 820px. `npm run dev`/`start` default to port 3001. No schema change.
+
 ## Incomplete modules and debt
 
 - Verified social proof has no production data source yet, so the fallback engine safely skips that rank rather than inventing evidence.
@@ -56,6 +58,8 @@ Updated: 2026-09-25
 - Sector classification currently uses a short Turkish/English keyword map. Unknown sectors are intentionally strict; restricted-claim matching uses deterministic phrases and is not a semantic or legal review. The applied policy is re-resolved at keep rather than snapshotted in each historical row.
 - P5.5A keeps drag/drop rescheduling disabled until a server mutation can enforce tenant, plan/version, timezone, conflict, and approval checks. The calendar routes Ainetra help to the existing content-plan flow; a direct item-level help orchestration remains unconnected. FullCalendar's month/year density and drawer focus behavior have static/code validation but no browser-based visual or keyboard session yet.
 
+- P5.5B native camera behavior was validated with Chromium device emulation only; real iOS Safari/Android Chrome capture, permission, cancellation, HEIC conversion, and large interrupted video uploads still need field testing. Generic (non-task) captures are stored untagged in the media library.
+
 ## Next task
 
-P5.5A Calendar Workspace & Dashboard Simplification is complete. P5.5B Mobile Navigation & Capture-First UX is READY and has not started. Phase 5.5 is not complete.
+Phase 5.5 is COMPLETE (P5.5A and P5.5B done, tag `phase-5.5-complete`). Phase 6 Publishing has not started and requires explicit user approval.

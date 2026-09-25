@@ -8,9 +8,11 @@ import { EmptyBusiness } from "@/components/empty-business";
 import { CaptureList } from "@/components/capture-list";
 import { ContentStockSummary } from "@/components/content-stock-summary";
 import { calculateBusinessBrainCompleteness, getBusinessBrainState } from "@/features/business-brain/service";
-import { listCaptureRequests } from "@/features/capture-engine/service";
+import { listCaptureRequests, listCurrentCaptureRequests } from "@/features/capture-engine/service";
+import { buildCapturePrompt, type CapturePrompt } from "@/features/capture-engine/prompt";
+import { MobileToday } from "@/components/mobile-today";
 import { getContentStock } from "@/features/content-stock/service";
-import { getCalendarWeekSummary } from "@/features/calendar/service";
+import { getCalendarWeekSummary, getTodayAgenda } from "@/features/calendar/service";
 import { calendarEventHref } from "@/features/calendar/projection";
 import { calendarPlatformLabels, calendarStatusClass, calendarStatusIcons, calendarStatusLabels, formatCalendarDay, formatCalendarDayShort } from "@/features/calendar/labels";
 
@@ -20,13 +22,16 @@ export default async function DashboardPage() {
   const business = await getFirstBusinessForUser(user.id);
   if (!business) return <><div className="topbar"><span>Production workspace</span></div><EmptyBusiness /></>;
 
-  const [variants, brainState, captureRequests, contentStock, week] = await Promise.all([
+  const [variants, brainState, captureRequests, contentStock, week, agenda, currentCaptures] = await Promise.all([
     prisma.contentVariant.findMany({ where: { contentItem: { businessId: business.id } }, include: { approvals: true, scheduledPosts: true } }),
     getBusinessBrainState(user.id, business.id),
     listCaptureRequests(user.id, business.id),
     getContentStock(user.id, business.id),
     getCalendarWeekSummary(user.id, business.id),
+    getTodayAgenda(user.id, business.id),
+    listCurrentCaptureRequests(user.id, business.id, { limit: 3 }),
   ]);
+  const prompts = currentCaptures.map(buildCapturePrompt).filter((prompt): prompt is CapturePrompt => prompt !== null);
   const brain = calculateBusinessBrainCompleteness(brainState);
   const awaitingConfirmation = brainState.attributes.filter((item) => item.verificationStatus === "INFERRED" || item.verificationStatus === "NEEDS_CONFIRMATION").length;
   const labels = variants.map(deriveWorkflowLabel);
@@ -40,6 +45,9 @@ export default async function DashboardPage() {
 
   return (
     <>
+      <MobileToday agenda={agenda} prompts={prompts} firstName={user.name.split(" ")[0]} />
+      {/* P5.5B: telefonda yukarıdaki Bugün yüzeyi gösterilir; masaüstü panosu değişmeden kalır. */}
+      <div className="desktop-only">
       <div className="topbar"><span>{business.location ?? "Ainetra Social"}</span><span className="live-dot">Foundation aktif</span></div>
       <section className="dashboard-hero">
         <div><span className="eyebrow">Bugünün çalışma alanı</span><h1>{greeting}, {user.name.split(" ")[0]}.</h1><p><strong>{business.name}</strong> için içerik operasyonunuz hazır.</p></div>
@@ -82,6 +90,7 @@ export default async function DashboardPage() {
         <Link href="/media" className="quick-card"><span>01</span><h3>Medya yükleyin</h3><p>Markanızın görsel arşivini güvenle oluşturun.</p><b>Medya kütüphanesine git →</b></Link>
         <Link href="/content" className="quick-card dark"><span>02</span><h3>İçerik oluşturun</h3><p>Platforma özel metin, CTA ve görseli tek yerde yönetin.</p><b>Yeni içerik oluştur →</b></Link>
         <Link href="/brand" className="quick-card"><span>03</span><h3>Markayı netleştirin</h3><p>Hedef kitlenizi, ses tonunuzu ve amaçlarınızı güncelleyin.</p><b>Marka ayarlarını aç →</b></Link>
+      </div>
       </div>
     </>
   );

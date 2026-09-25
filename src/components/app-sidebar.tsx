@@ -1,20 +1,7 @@
 import Link from "next/link";
 import { signOutAction } from "@/actions/auth";
 import { BrandMark } from "./brand-mark";
-
-const navigation = [
-  ["⌂", "Dashboard", "/dashboard"],
-  // P5.5A: takvim birincil çalışma alanı olduğu için panodan hemen sonra gelir.
-  ["□", "Takvim", "/calendar"],
-  ["✦", "İçerikler", "/content"],
-  ["◫", "İçerik Planı", "/content-plan"],
-  ["▧", "Medya", "/media"],
-  ["◨", "Kreatif", "/creative"],
-  ["◇", "Marka", "/brand"],
-  ["◎", "Sosyal Strateji", "/strategy"],
-  ["◈", "Business Brain", "/business-brain"],
-  ["⚙", "Ayarlar", "/settings"],
-];
+import { navigation } from "./navigation";
 
 export function AppSidebar({ userName, businessName }: { userName: string; businessName?: string }) {
   return (
@@ -25,7 +12,7 @@ export function AppSidebar({ userName, businessName }: { userName: string; busin
         <span><small>Çalışma alanı</small><strong>{businessName ?? "İşletme oluştur"}</strong></span>
       </div>
       <nav>
-        {navigation.map(([icon, label, href]) => (
+        {navigation.map(({ icon, label, href }) => (
           <Link href={href} key={href}><span>{icon}</span>{label}</Link>
         ))}
       </nav>

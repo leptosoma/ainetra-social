@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/features/auth/session";
-import { deleteMedia, updateMediaPlanningTags, uploadMedia } from "@/features/media/service";
+import { deleteMedia, updateMediaPlanningTags, uploadMedia, uploadMediaForCaptureRequest } from "@/features/media/service";
 import { analyzeMediaAsset } from "@/features/visual-analysis/service";
 import { DomainError } from "@/lib/domain-error";
 
@@ -21,6 +21,35 @@ export async function uploadMediaAction(formData: FormData) {
   revalidatePath("/content-plan");
   revalidatePath("/calendar");
   revalidatePath("/dashboard");
+}
+
+export type CaptureUploadState = { status: "idle" | "success" | "error"; message: string };
+
+/**
+ * P5.5B: mobil çekim sayfası ve Bugün kartı için yükleme. Hata bir hata sayfasına düşmez; kullanıcıya
+ * düz Türkçe bir sonuç döner. `captureRequestId` varsa işletme ve etiket sunucuda istekten türetilir;
+ * yoksa dosya etiketsiz olarak medya kütüphanesine eklenir (üyelik yine sunucuda denetlenir).
+ */
+export async function captureUploadAction(_previous: CaptureUploadState, formData: FormData): Promise<CaptureUploadState> {
+  const currentUserId = await userId();
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { status: "error", message: "Dosya seçilmedi." };
+  const captureRequestId = String(formData.get("captureRequestId") ?? "");
+  try {
+    if (captureRequestId) await uploadMediaForCaptureRequest(currentUserId, captureRequestId, file);
+    else await uploadMedia(currentUserId, String(formData.get("businessId") ?? ""), file, []);
+  } catch (error) {
+    if (error instanceof DomainError) return { status: "error", message: error.message };
+    throw error;
+  }
+  revalidatePath("/media");
+  revalidatePath("/content-plan");
+  revalidatePath("/calendar");
+  revalidatePath("/dashboard");
+  return {
+    status: "success",
+    message: captureRequestId ? "Yüklendi. Bu çekim görevi için medya alındı." : "Yüklendi. Dosya medya kütüphanenize eklendi.",
+  };
 }
 
 export async function updateMediaPlanningTagsAction(formData: FormData) {

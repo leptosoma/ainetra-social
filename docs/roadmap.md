@@ -37,11 +37,11 @@ Visual Intelligence must preserve factual reality in authentic media, distinguis
 
 P5-05 verified the cross-module authentic derivative and designed-creative flows, tenant isolation, explicit media decisions, Content Stock/Fallback separation, and no implicit content approval or publication. Creative Campaign now resolves a conservative sector policy from the business sector: hospitality, food, or health. Unknown sectors use the strictest profile. All output remains fact-grounded and human-reviewed; health additionally requires an explicit acceptance, and current policies allow deterministic graphic templates only.
 
-The **OSS Architecture Spike** is documented in [oss-architecture-spike.md](oss-architecture-spike.md). FullCalendar Standard is now used for the P5.5A desktop calendar; the Ainetra-owned mobile Today/3-day/Week and capture UI remains P5.5B work. Keep Sharp, defer BullMQ/tusd/imgproxy, and use bounded FFmpeg tooling when video processing begins. Phase 6 should own a `PublishingAdapter`, transactional publication intent and tenant-safe reconciliation. Pilot Postiz behind the adapter subject to legal/security/operations gates; use a minimal native Meta adapter for first production Instagram/Facebook unless that pilot passes. Mixpost Lite does not meet Instagram/API needs, and paid-tier SaaS rights require separate review. Phase 6 has not started.
+The **OSS Architecture Spike** is documented in [oss-architecture-spike.md](oss-architecture-spike.md). FullCalendar Standard is now used for the P5.5A desktop calendar; the Ainetra-owned mobile Today/3-day/Week and capture UI shipped in P5.5B. Keep Sharp, defer BullMQ/tusd/imgproxy, and use bounded FFmpeg tooling when video processing begins. Phase 6 should own a `PublishingAdapter`, transactional publication intent and tenant-safe reconciliation. Pilot Postiz behind the adapter subject to legal/security/operations gates; use a minimal native Meta adapter for first production Instagram/Facebook unless that pilot passes. Mixpost Lite does not meet Instagram/API needs, and paid-tier SaaS rights require separate review. Phase 6 has not started.
 
-## Phase 5.5 — In Progress: Simple Experience & Calendar Workspace
+## Phase 5.5 — Completed: Simple Experience & Calendar Workspace
 
-After Visual Intelligence and before or alongside Publishing integration, simplify the customer experience without weakening the internal engines. P5.5A is complete; P5.5B is ready. The phase as a whole is not complete.
+After Visual Intelligence and before or alongside Publishing integration, simplify the customer experience without weakening the internal engines. P5.5A and P5.5B are complete; the phase is complete.
 
 ### P5.5A — Calendar Workspace & Dashboard Simplification
 
@@ -55,7 +55,7 @@ After Visual Intelligence and before or alongside Publishing integration, simpli
 
 ### P5.5B — Mobile Navigation & Capture-First UX
 
-**READY; not started.**
+**DONE.** Phone layout uses a top bar with an `İşletmem` menu and a safe-area bottom dock with a central capture sheet (current CaptureRequest first, native camera/gallery inputs, server-derived tags), a mobile Bugün surface, and an Ainetra-owned Gün/3 gün/Hafta/Ay calendar; FullCalendar stays desktop/tablet only.
 
 - Treat mobile as a primary capture and upload surface for staff, not a compressed desktop sidebar. Aim for roughly five bottom navigation items: `Bugün`, `Takvim`, a visually dominant central action, `İçerikler`, and `Medya`.
 - The central action may open a compact sheet: `Fotoğraf çek`, `Video çek`, `Galeriden yükle`, `Ainetra ile içerik hazırla`. Prefer a relevant prompt such as “Cuma gönderisi için fotoğraf çek” when the current plan needs it.

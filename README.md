@@ -27,7 +27,7 @@ npm run db:seed
 npm run dev
 ```
 
-Uygulamayı `http://localhost:3000` adresinde açın.
+Uygulamayı `http://localhost:3001` adresinde açın.
 
 Geliştirme hesabı:
 

@@ -4,10 +4,11 @@ import { getCurrentUser } from "@/features/auth/session";
 import { getFirstBusinessForUser } from "@/lib/authorization";
 import { EmptyBusiness } from "@/components/empty-business";
 import { PageHeader } from "@/components/page-header";
-import { getCalendarWorkspace } from "@/features/calendar/service";
+import { getCalendarWorkspace, getMobileCalendar } from "@/features/calendar/service";
 import { calendarStatusIcons, calendarStatusLabels, calendarViewLabels, formatCalendarDay, monthLabels } from "@/features/calendar/labels";
-import { addCalendarDays, calendarViews, isCalendarDay, shiftCalendarAnchor, type CalendarView } from "@/features/calendar/projection";
+import { addCalendarDays, calendarViews, isCalendarDay, isMobileCalendarView, mobileViewForDesktop, shiftCalendarAnchor, type CalendarView } from "@/features/calendar/projection";
 import { CalendarGrid } from "./calendar-grid";
+import { MobileCalendar } from "./mobile-calendar";
 
 function parseView(value?: string): CalendarView {
   return calendarViews.includes(value as CalendarView) ? (value as CalendarView) : "week";
@@ -24,7 +25,7 @@ function href(view: CalendarView, date: string) {
   return `/calendar?view=${view}&date=${date}`;
 }
 
-export default async function CalendarPage({ searchParams }: { searchParams: Promise<{ view?: string; date?: string; event?: string }> }) {
+export default async function CalendarPage({ searchParams }: { searchParams: Promise<{ view?: string; m?: string; date?: string; event?: string }> }) {
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
   const business = await getFirstBusinessForUser(user.id);
@@ -33,11 +34,30 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const view = parseView(params.view);
   // Çapa sunucuda doğrulanır; geçersiz bir tarih sessizce işletme-yerel bugüne düşer.
   const requestedAnchor = params.date && isCalendarDay(params.date) ? params.date : undefined;
-  const workspace = await getCalendarWorkspace(user.id, business.id, { view, anchor: requestedAnchor });
+  // P5.5B: telefon görünümü ayrı parametre taşır; yoksa masaüstü görünümünün karşılığı, o da yoksa
+  // bugün kullanılır. İki sunum da aynı sunucu izdüşümünü ve aynı çapa doğrulamasını kullanır.
+  const mobileView = isMobileCalendarView(params.m) ? params.m : params.view ? mobileViewForDesktop(view) : "day";
+  const [workspace, mobile] = await Promise.all([
+    getCalendarWorkspace(user.id, business.id, { view, anchor: requestedAnchor }),
+    getMobileCalendar(user.id, business.id, { view: mobileView, anchor: requestedAnchor }),
+  ]);
   const { counts, range, anchor } = workspace;
 
   return (
     <>
+      <MobileCalendar
+        businessId={business.id}
+        view={mobile.view}
+        desktopView={view}
+        anchor={mobile.anchor}
+        today={mobile.today}
+        range={mobile.range}
+        days={mobile.days}
+        counts={mobile.counts}
+        initialEventId={params.event}
+      />
+
+      <div className="desktop-only">
       <PageHeader
         eyebrow="Çalışma alanı"
         title="Takvim"
@@ -66,6 +86,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
           <Link href={href(view, shiftCalendarAnchor(view, anchor, 1))} aria-label="Sonraki dönem">→</Link>
         </div>
       </section>
+      </div>
 
       <CalendarGrid
         businessId={business.id}

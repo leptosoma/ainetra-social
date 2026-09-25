@@ -171,3 +171,34 @@ export async function deleteMedia(userId: string, mediaAssetId: string) {
   }, { isolationLevel: "Serializable" });
   await storage.delete(asset.storageKey);
 }
+
+/**
+ * P5.5B: mobil "çek ve yükle" akışı. İstemci yalnızca CaptureRequest kimliğini ve dosyayı gönderir;
+ * işletme, planlama etiketi ve beklenen medya türü SUNUCUDA istek satırından türetilir. Tarayıcının
+ * gönderdiği işletme/etiket bilgisine hiçbir yetki tanınmaz. İstek bu işletmenin güncel açık işi
+ * olmalıdır: kapanmış, süresi dolmuş, yerine konmuş/eski plan sürümündeki bir iş reddedilir. Dosya
+ * doğrulaması, özgün dosyanın saklanması ve istek karşılama davranışı `uploadMedia` ile aynıdır.
+ */
+export async function uploadMediaForCaptureRequest(userId: string, captureRequestId: string, file: File, now = new Date()) {
+  const request = await prisma.captureRequest.findUnique({
+    where: { id: captureRequestId },
+    include: { business: { select: { timezone: true } }, contentPlanItem: { select: { status: true, mediaRequirement: true, mediaAvailability: true, plan: { select: { businessId: true, status: true } } } } },
+  });
+  if (!request) throw new DomainError("Çekim görevi bulunamadı.", "NOT_FOUND");
+  await requireMembership(userId, request.businessId);
+  const item = request.contentPlanItem;
+  const today = new Intl.DateTimeFormat("sv-SE", { timeZone: request.business.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+  const current = request.status === "OPEN"
+    && item.status === "ACTIVE"
+    && item.mediaAvailability === "MISSING"
+    && item.mediaRequirement === request.mediaRequirement
+    && item.plan.businessId === request.businessId
+    && item.plan.status !== "SUPERSEDED"
+    && request.dueAt.toISOString().slice(0, 10) >= today;
+  if (!current) throw new DomainError("Bu çekim görevi artık güncel değil.", "CONFLICT");
+  const fileType = allowedImageMimeTypes.has(file.type) ? "IMAGE" : allowedVideoMimeTypes.has(file.type) ? "VIDEO" : null;
+  if (fileType && fileType !== request.requestedMediaType) {
+    throw new DomainError(request.requestedMediaType === "VIDEO" ? "Bu görev için bir video gerekiyor." : "Bu görev için bir fotoğraf gerekiyor.", "VALIDATION_ERROR");
+  }
+  return uploadMedia(userId, request.businessId, file, [request.mediaRequirement]);
+}

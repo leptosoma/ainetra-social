@@ -489,3 +489,53 @@ export function summarizeCalendarEvents(events: CalendarEvent[]): CalendarCounts
 export function calendarEventHref(event: Pick<CalendarEvent, "id" | "date">) {
   return `/calendar?view=day&date=${event.date}&event=${encodeURIComponent(event.id)}`;
 }
+
+// P5.5B: telefon için hafif, Ainetra'ya ait takvim sunumu. Aynı izdüşümü ve aynı işletme-yerel gün
+// semantiğini kullanır; yalnızca aralığı ve gruplamayı değiştirir. FullCalendar masaüstü/tablette kalır.
+
+export type MobileCalendarView = "day" | "3day" | "week" | "month";
+export const mobileCalendarViews: readonly MobileCalendarView[] = ["day", "3day", "week", "month"];
+
+export function isMobileCalendarView(value: unknown): value is MobileCalendarView {
+  return mobileCalendarViews.includes(value as MobileCalendarView);
+}
+
+/** Masaüstü görünümünün telefondaki karşılığı; yıl telefonda ay özetine iner. */
+export function mobileViewForDesktop(view: CalendarView): MobileCalendarView {
+  return view === "year" ? "month" : view;
+}
+
+/**
+ * Telefon görünümünün kapsadığı işletme-yerel gün aralığı; `to` dışlayıcıdır. Ay görünümü yalnızca
+ * ayın kendi günlerini kapsar (komşu ay günleri yok) ki özet kısa kalsın.
+ */
+export function mobileCalendarRange(view: MobileCalendarView, anchor: string): { from: string; to: string } {
+  if (view === "day") return { from: anchor, to: addCalendarDays(anchor, 1) };
+  if (view === "3day") return { from: anchor, to: addCalendarDays(anchor, 3) };
+  if (view === "week") return calendarRange("week", anchor);
+  const from = startOfCalendarMonth(anchor);
+  return { from, to: addCalendarMonths(from, 1) };
+}
+
+export function shiftMobileCalendarAnchor(view: MobileCalendarView, anchor: string, direction: -1 | 1) {
+  if (view === "day") return addCalendarDays(anchor, direction);
+  if (view === "3day") return addCalendarDays(anchor, 3 * direction);
+  if (view === "week") return addCalendarDays(anchor, 7 * direction);
+  return addCalendarMonths(startOfCalendarMonth(anchor), direction);
+}
+
+export type CalendarDayGroup = {
+  date: string;
+  events: CalendarEvent[];
+  counts: CalendarCounts;
+};
+
+/** Aralıktaki HER gün için (boş günler dahil) sıralı olay grubu ve aynı sayım politikası. */
+export function groupCalendarEventsByDay(events: CalendarEvent[], range: { from: string; to: string }): CalendarDayGroup[] {
+  const groups: CalendarDayGroup[] = [];
+  for (let date = range.from; date < range.to; date = addCalendarDays(date, 1)) {
+    const dayEvents = events.filter((event) => event.date === date).sort(compareEvents);
+    groups.push({ date, events: dayEvents, counts: summarizeCalendarEvents(dayEvents) });
+  }
+  return groups;
+}
