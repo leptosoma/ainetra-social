@@ -9,7 +9,7 @@ import type {
   ScheduledPostStatus,
   SocialPlatform,
 } from "../../../generated/prisma/enums";
-import { calendarMediaLabels } from "./labels";
+import { calendarMediaLabels, calendarPlatformLabels } from "./labels";
 
 // P5.5A kapsamı: Ainetra'ya ait takvim İZDÜŞÜMÜ. Yeni tablo yok; her olay mevcut
 // ContentPlanItem veya ScheduledPost satırından türetilir ve olay kimliği her zaman bir
@@ -116,6 +116,7 @@ export type ProjectionScheduledPost = {
     approvedVersions: number[];
     mediaAssetId: string | null;
     mediaFilename: string | null;
+    mediaType: MediaType | null;
     contentItem: { id: string; title: string; contentType: ContentType };
   };
 };
@@ -263,6 +264,11 @@ function planItemEvent(item: ProjectionPlanItem, today: string): CalendarEvent |
       ? "Medya ve içeriğin güncel sürümü hazır."
       : "İçerik oluşturuldu; güncel sürümün onayı sizi bekliyor.";
     if (!approved) need = "İçeriğin güncel sürümünü onaylamanız gerekiyor.";
+  } else if (item.contentItem) {
+    // İçerik kaydı var ama bu platformun varyantı yok; hazır saymak yanıltıcı olurdu.
+    status = "ACTION_NEEDED";
+    statusReason = `İçerik oluşturuldu ancak ${calendarPlatformLabels[item.platform]} varyantı henüz hazır değil.`;
+    need = `${calendarPlatformLabels[item.platform]} varyantını tamamlamanız gerekiyor.`;
   } else {
     status = "PLANNED";
     statusReason = item.mediaRequirement === "NO_NEW_MEDIA_REQUIRED"
@@ -287,6 +293,7 @@ function planItemEvent(item: ProjectionPlanItem, today: string): CalendarEvent |
     mediaRequirement: item.mediaRequirement,
     mediaAssetId: item.mediaAsset?.id ?? null,
     mediaFilename: item.mediaAsset?.originalFilename ?? null,
+    mediaType: item.mediaAsset?.type ?? null,
     designedCreative,
     planId: item.planId,
     contentItemId: item.contentItem?.id ?? null,
@@ -350,6 +357,7 @@ function scheduledPostEvent(post: ProjectionScheduledPost, timeZone: string): Ca
     mediaRequirement: null,
     mediaAssetId: post.variant.mediaAssetId,
     mediaFilename: post.variant.mediaFilename,
+    mediaType: post.variant.mediaType,
     designedCreative: false,
     planId: null,
     contentItemId: post.variant.contentItem.id,

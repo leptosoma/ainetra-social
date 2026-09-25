@@ -206,7 +206,7 @@ export function CalendarGrid({ businessId, view, range, today, events, initialEv
                   {selected.fallbackProposalPending ? "Ainetra önerisini incele" : "Çekemiyorum → Ainetra yardım et"}
                 </Link>
               )}
-              {selected.mediaAssetId && <Link className="mini-button" href={`/media/${selected.mediaAssetId}/analysis`}>Görsel araçları</Link>}
+              {selected.mediaAssetId && selected.mediaType === "IMAGE" && <Link className="mini-button" href={`/media/${selected.mediaAssetId}/analysis`}>Görsel araçları</Link>}
             </div>
             <small className="calendar-drawer-note">Bu ekran hiçbir onayı veya yayın zamanını kendi başına değiştirmez.</small>
           </aside>

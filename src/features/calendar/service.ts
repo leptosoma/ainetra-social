@@ -64,7 +64,7 @@ async function loadProjectionInputs(businessId: string, range: { from: string; t
         id: true, planId: true, status: true, platform: true, contentType: true, plannedDate: true, recommendedTime: true,
         topic: true, concept: true, mediaRequirement: true, mediaAvailability: true,
         plan: { select: { businessId: true, status: true } },
-        mediaAsset: { select: { id: true, originalFilename: true, origin: true } },
+        mediaAsset: { select: { id: true, originalFilename: true, origin: true, type: true } },
         contentItem: { select: { id: true, title: true, variants: { select: { platform: true, version: true, approvals: { select: { approvedVersion: true } } } } } },
         captureRequests: { where: { status: "OPEN" }, select: { title: true, instructions: true, mediaRequirement: true } },
         fallbackProposals: { where: { status: "PROPOSED" }, select: { id: true } },
@@ -80,7 +80,7 @@ async function loadProjectionInputs(businessId: string, range: { from: string; t
           select: {
             version: true, caption: true, mediaAssetId: true,
             approvals: { select: { approvedVersion: true } },
-            mediaAsset: { select: { originalFilename: true } },
+            mediaAsset: { select: { originalFilename: true, type: true } },
             contentItem: { select: { id: true, title: true, contentType: true } },
           },
         },
@@ -136,6 +136,7 @@ async function loadProjectionInputs(businessId: string, range: { from: string; t
       approvedVersions: post.contentVariant.approvals.map((approval) => approval.approvedVersion),
       mediaAssetId: post.contentVariant.mediaAssetId,
       mediaFilename: post.contentVariant.mediaAsset?.originalFilename ?? null,
+      mediaType: post.contentVariant.mediaAsset?.type ?? null,
       contentItem: post.contentVariant.contentItem,
     },
   }));

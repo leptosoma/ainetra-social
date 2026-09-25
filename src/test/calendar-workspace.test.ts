@@ -12,7 +12,7 @@ import {
   type ProjectionPlanItem,
 } from "@/features/calendar/projection";
 import { calendarStatusIcons, calendarStatusLabels } from "@/features/calendar/labels";
-import type { ContentPlanStatus, MediaAssetOrigin, MediaAvailability, MediaRequirement, SocialPlatform } from "../../generated/prisma/enums";
+import type { ContentPlanStatus, MediaAssetOrigin, MediaAvailability, MediaRequirement, MediaType, SocialPlatform } from "../../generated/prisma/enums";
 
 // 2026-10-05 bir Pazartesi; işletme-yerel hafta 05–11 Ekim 2026.
 const now = new Date("2026-10-05T09:00:00.000Z");
@@ -149,7 +149,7 @@ describe("Ainetra P5.5A calendar projection", () => {
   });
 
   it("does not let a designed creative satisfy an authentic photo requirement", () => {
-    const designed = { id: "asset-1", originalFilename: "tasarim.png", origin: "CREATIVE_CAMPAIGN" as MediaAssetOrigin };
+    const designed = { id: "asset-1", originalFilename: "tasarim.png", origin: "CREATIVE_CAMPAIGN" as MediaAssetOrigin, type: "IMAGE" as MediaType };
     const [photo] = project([planItemInput({ mediaRequirement: "PHOTO_PRODUCT", mediaAvailability: "AVAILABLE", mediaAsset: designed })]);
     expect(photo.status).toBe("MEDIA_NEEDED");
     expect(photo.designedCreative).toBe(true);
@@ -169,7 +169,7 @@ describe("Ainetra P5.5A calendar projection", () => {
       planItems: [planItemInput({ plannedDate: day("2026-10-07") })], scheduledPosts: [],
     });
     expect(projected[0].fallbackEligible).toBe(false);
-    const asset = { id: "asset-2", originalFilename: "urun.jpg", origin: "UPLOAD" as MediaAssetOrigin };
+    const asset = { id: "asset-2", originalFilename: "urun.jpg", origin: "UPLOAD" as MediaAssetOrigin, type: "IMAGE" as MediaType };
     const [covered] = project([planItemInput({ mediaAvailability: "AVAILABLE", mediaAsset: asset })]);
     expect(covered.fallbackEligible).toBe(false);
     const [pending] = project([planItemInput({ fallbackProposalPending: true })]);
@@ -178,7 +178,7 @@ describe("Ainetra P5.5A calendar projection", () => {
   });
 
   it("requires the current content version to be approved before calling an item ready", () => {
-    const asset = { id: "asset-3", originalFilename: "urun.jpg", origin: "UPLOAD" as MediaAssetOrigin };
+    const asset = { id: "asset-3", originalFilename: "urun.jpg", origin: "UPLOAD" as MediaAssetOrigin, type: "IMAGE" as MediaType };
     const base = { mediaAvailability: "AVAILABLE" as MediaAvailability, mediaAsset: asset };
     const [stale] = project([planItemInput({ ...base, contentItem: { id: "content-1", title: "Gönderi", variants: [{ platform: "INSTAGRAM", version: 2, approvedVersions: [1] }] } })]);
     expect(stale.status).toBe("ACTION_NEEDED");
@@ -204,7 +204,7 @@ describe("Ainetra P5.5A calendar projection", () => {
   });
 
   it("summarizes counts from the same events the calendar shows", () => {
-    const asset = { id: "asset-4", originalFilename: "urun.jpg", origin: "UPLOAD" as MediaAssetOrigin };
+    const asset = { id: "asset-4", originalFilename: "urun.jpg", origin: "UPLOAD" as MediaAssetOrigin, type: "IMAGE" as MediaType };
     const events = project([
       planItemInput({ id: "a" }),
       planItemInput({ id: "b", fallbackProposalPending: true }),
