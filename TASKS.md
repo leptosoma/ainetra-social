@@ -2,7 +2,7 @@
 
 ## Active phase
 
-Phase 5.5 — Simple Experience & Calendar Workspace COMPLETE. Phase 6 has not started and requires explicit approval.
+Phase 5.5 — Simple Experience & Calendar Workspace COMPLETE. Phase 6 Publishing is READY for implementation; no Phase 6 code has started.
 
 ## Done
 
@@ -26,7 +26,7 @@ Phase 5.5 — Simple Experience & Calendar Workspace COMPLETE. Phase 6 has not s
 
 ## Ready
 
-- None. Phase 6 Publishing awaits explicit approval.
+- P6-01 Publishing Domain Foundation. Task packet prepared at `claude-tasks/P6-01-publishing-foundation.md`; implementation has not started.
 
 ## Backlog
 
@@ -40,5 +40,4 @@ Phase 5.5 — Simple Experience & Calendar Workspace COMPLETE. Phase 6 has not s
 - Ainetra Intent Engine — future shared capability for public social intent signals in Ainetra Social and accepted lead/pipeline opportunities in Ainetra Sales. Documentation only; no Phase 5 implementation.
 - Field-test native `capture` file inputs on real iOS Safari and Android Chrome (permissions, cancellation, orientation, HEIC-to-JPEG conversion, interrupted large video uploads); automated checks used Chromium device emulation only.
 - The layout's capture prompt reads existing CaptureRequests read-only; a plan whose requests have not yet been reconciled shows its prompt after the next dashboard/content-plan load.
-- Phase 6 Publishing.
 - Phase 7 Analytics + Learning.

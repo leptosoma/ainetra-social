@@ -62,4 +62,4 @@ Updated: 2026-09-25
 
 ## Next task
 
-Phase 5.5 is COMPLETE (P5.5A and P5.5B done, tag `phase-5.5-complete`). Phase 6 Publishing has not started and requires explicit user approval.
+Phase 5.5 is COMPLETE (P5.5A and P5.5B done, tag `phase-5.5-complete`). Phase 6 Publishing is READY, but no implementation has started. P6-01 Publishing Domain Foundation is READY with a focused packet at `claude-tasks/P6-01-publishing-foundation.md`; the remaining Phase 6 tasks are planned in `docs/roadmap.md`. The current publishing baseline is `ScheduledPost`, `PublishAttempt`, approval/version checks, and edit-time schedule invalidation; there is no delivery worker, Meta OAuth/API, or transactional publish outbox yet.
