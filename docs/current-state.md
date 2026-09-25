@@ -68,4 +68,4 @@ Updated: 2026-09-25
 
 ## Next task
 
-Phase 6 Publishing is IN PROGRESS, not complete. P6-01 Publishing Domain Foundation is DONE. Next: P6-02 Meta Account Connection (secure native Instagram/Facebook OAuth, tenant/account mapping, encrypted token boundary; no publication) is READY, not implemented. Its planning packet is `claude-tasks/P6-02-meta-account-connection.md`. Current Meta version/token/App Review details are an explicit pre-implementation verification gate because Meta developer pages were access-limited during packet preparation.
+Phase 6 Publishing is IN PROGRESS, not complete. P6-01 Publishing Domain Foundation is DONE. Next: P6-02 Meta Account Connection (secure native Instagram/Facebook OAuth, tenant/account mapping, encrypted token boundary; no publication) is READY, not implemented. Its planning packet is `claude-tasks/P6-02-meta-account-connection.md`. Meta Graph API v26.0 and the minimum connection permission set are documented there; token lifecycle and production App Review/access details remain implementation verification gates.
