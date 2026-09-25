@@ -37,7 +37,7 @@ Visual Intelligence must preserve factual reality in authentic media, distinguis
 
 P5-05 verified the cross-module authentic derivative and designed-creative flows, tenant isolation, explicit media decisions, Content Stock/Fallback separation, and no implicit content approval or publication. Creative Campaign now resolves a conservative sector policy from the business sector: hospitality, food, or health. Unknown sectors use the strictest profile. All output remains fact-grounded and human-reviewed; health additionally requires an explicit acceptance, and current policies allow deterministic graphic templates only.
 
-The next recommended activity is an **OSS Architecture Spike** to evaluate reusable infrastructure before Phase 5.5 and Phase 6. It is analysis only and has not started.
+The **OSS Architecture Spike** is documented in [oss-architecture-spike.md](oss-architecture-spike.md). Recommended direction only: FullCalendar Standard for desktop calendar rendering with an Ainetra-owned mobile Today/3-day/Week and capture UI; keep Sharp, defer BullMQ/tusd/imgproxy, and use bounded FFmpeg tooling when video processing begins. Phase 6 should own a `PublishingAdapter`, transactional publication intent and tenant-safe reconciliation. Pilot Postiz behind the adapter subject to legal/security/operations gates; use a minimal native Meta adapter for first production Instagram/Facebook unless that pilot passes. Mixpost Lite does not meet Instagram/API needs, and paid-tier SaaS rights require separate review. No Phase 5.5 or Phase 6 implementation has started.
 
 ## Phase 5.5 — Future: Simple Experience & Calendar Workspace
 
