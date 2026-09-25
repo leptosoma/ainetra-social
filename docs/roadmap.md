@@ -62,11 +62,11 @@ After Visual Intelligence and before or alongside Publishing integration, simpli
 - Move rarely used Marka, Business Brain, Sosyal Strateji, and integrations/settings into an `İşletmem` or settings area after UX review.
 - Support bottom safe areas, iPhone home indicators, Android gesture navigation, thumb-friendly targets, minimal top navigation, and sheets or modals where they make a task simpler.
 
-## Phase 6 — READY: Publishing
+## Phase 6 — IN PROGRESS: Publishing
 
-**Planning only; no Phase 6 feature code has started.** Ainetra PostgreSQL owns approval, immutable publish intent/outbox, attempts, schedule, and audit. The first production delivery path is a native Meta adapter behind an Ainetra-owned `PublishingAdapter`; Postiz remains a separate pilot/spike. Start with a small PostgreSQL-backed worker and reconciliation, not BullMQ. Unknown provider outcomes require reconciliation and never count as automatic success or failure. TikTok is outside this phase.
+Ainetra PostgreSQL owns approval, immutable publish intent/outbox, attempts, schedule, and audit. The first production delivery path is a native Meta adapter behind an Ainetra-owned `PublishingAdapter`; Postiz remains a separate pilot/spike. Start with a small PostgreSQL-backed worker and reconciliation, not BullMQ. Unknown provider outcomes require reconciliation and never count as automatic success or failure. TikTok is outside this phase.
 
-- **P6-01 — Publishing Domain Foundation (READY):** provider-neutral adapter contract, approved immutable snapshot, transactional publish intent/outbox, attempt/status model, idempotency and state-transition tests. No Meta connection or delivery. Packet: `claude-tasks/P6-01-publishing-foundation.md`.
+- **P6-01 — Publishing Domain Foundation (DONE):** provider-neutral adapter contract, approved immutable snapshot, transactional publish intent/outbox, attempt/status model, idempotency and state-transition tests. No Meta connection or delivery. Packet: `claude-tasks/P6-01-publishing-foundation.md`.
 - **P6-02 — Meta Account Connection (planned):** secure native Instagram/Facebook OAuth, tenant/account mapping, encrypted token boundary, rotation/revocation and connection audit. No publication yet.
 - **P6-03 — Native Meta Submission (planned):** media preparation and provider-neutral execution unit for an explicitly due-now intent; normalize definitive and unknown results, preserve remote IDs and idempotency evidence. Do not bypass the outbox.
 - **P6-04 — Scheduled PostgreSQL Worker (planned):** claim due intents with leases, bounded retry for definite retryable failures, crash-safe processing and operational visibility using the same execution unit. No BullMQ.

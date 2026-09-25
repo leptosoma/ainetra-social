@@ -58,6 +58,29 @@ enum PublishAttemptStatus {
   PENDING
   SUCCESS
   FAILED
+  // P6-01: gönderim sağlayıcıya ulaşmış olabilir; sonuç ancak mutabakat ile belirlenir.
+  UNKNOWN
+}
+
+// P6-01: PostgreSQL outbox satırının (PublishIntent) durumları. Geçiş kuralları tek bir
+// domain modülünde tanımlıdır (src/features/publishing/intent-state.ts).
+enum PublishIntentState {
+  PENDING
+  IN_FLIGHT
+  UNKNOWN
+  RETRY_WAIT
+  PUBLISHED
+  FAILED
+  CANCELLED
+  INVALIDATED
+}
+
+// P6-01: sağlayıcı sonucunun normalize edilmiş sınıfı.
+enum PublishOutcomeClass {
+  PUBLISHED
+  RETRYABLE_REJECTION
+  PERMANENT_REJECTION
+  UNKNOWN
 }
 
 enum BusinessAnalysisStatus {
@@ -437,6 +460,7 @@ model Business {
   mediaBrandStyles  MediaBrandStyle[]
   socialVariants    MediaSocialVariant[]
   creativeCampaigns MediaCreativeCampaign[]
+  publishIntents    PublishIntent[]
 }
 
 model ContentPlanningRun {
@@ -695,6 +719,7 @@ model SocialAccount {
   updatedAt         DateTime            @updatedAt
   business          Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
   scheduledPosts    ScheduledPost[]
+  publishIntents    PublishIntent[]
 
   @@index([businessId])
 }
@@ -924,6 +949,7 @@ model ContentVariant {
   approvals       Approval[]
   scheduledPosts  ScheduledPost[]
   mediaUsages     MediaUsage[]
+  publishIntents  PublishIntent[]
 
   @@unique([contentItemId, platform])
   @@index([mediaAssetId])
@@ -937,6 +963,7 @@ model Approval {
   approvedAt       DateTime       @default(now())
   contentVariant   ContentVariant @relation(fields: [contentVariantId], references: [id], onDelete: Cascade)
   approvedBy       User           @relation(fields: [approvedById], references: [id], onDelete: Restrict)
+  publishIntents   PublishIntent[]
 
   @@unique([contentVariantId, approvedVersion])
   @@index([approvedById])
@@ -957,6 +984,7 @@ model ScheduledPost {
   socialAccount    SocialAccount       @relation(fields: [socialAccountId], references: [id], onDelete: Restrict)
   contentVariant   ContentVariant      @relation(fields: [contentVariantId], references: [id], onDelete: Cascade)
   publishAttempts  PublishAttempt[]
+  publishIntents   PublishIntent[]
   performance      PostPerformance?
 
   @@index([businessId, scheduledAt])
@@ -964,15 +992,69 @@ model ScheduledPost {
 }
 
 model PublishAttempt {
-  id              String               @id @default(cuid())
-  scheduledPostId String
-  status          PublishAttemptStatus @default(PENDING)
-  errorCode       String?
-  errorMessage    String?
-  attemptedAt     DateTime             @default(now())
-  scheduledPost   ScheduledPost        @relation(fields: [scheduledPostId], references: [id], onDelete: Cascade)
+  id                String               @id @default(cuid())
+  scheduledPostId   String
+  status            PublishAttemptStatus @default(PENDING)
+  errorCode         String?
+  errorMessage      String?
+  attemptedAt       DateTime             @default(now())
+  // P6-01: aşağıdaki alanlar boş olabilir; P6-01 öncesi satırlar olduğu gibi geçerli kalır.
+  publishIntentId   String?
+  attemptNumber     Int?
+  outcome           PublishOutcomeClass?
+  providerReference String?
+  // Yalnızca redakte edilmiş teşhis bilgisi; token/secret asla yazılmaz.
+  diagnostics       Json?
+  completedAt       DateTime?
+  scheduledPost     ScheduledPost        @relation(fields: [scheduledPostId], references: [id], onDelete: Cascade)
+  publishIntent     PublishIntent?       @relation(fields: [publishIntentId], references: [id], onDelete: Cascade)
 
+  @@unique([publishIntentId, attemptNumber])
   @@index([scheduledPostId, attemptedAt])
+}
+
+// P6-01: Ainetra'nın PostgreSQL outbox satırı (ikinci bir kuyruk tablosu yok). Onaylı güncel sürümün
+// değişmez anlık görüntüsünü (snapshot) ve deterministik özetini taşır. Sonraki içerik düzenlemeleri
+// snapshot'ı yeniden yazmaz; gönderilmemiş intent'i gönderilemez hale getirir.
+model PublishIntent {
+  id                String             @id @default(cuid())
+  businessId        String
+  socialAccountId   String
+  scheduledPostId   String
+  sourceVariantId   String
+  sourceVersion     Int
+  approvalId        String
+  platform          SocialPlatform
+  dueAt             DateTime
+  adapterKey        String
+  adapterVersion    Int
+  generation        Int                @default(1)
+  idempotencyKey    String             @unique
+  snapshotVersion   Int
+  snapshot          Json
+  snapshotHash      String
+  state             PublishIntentState @default(PENDING)
+  stateChangedAt    DateTime           @default(now())
+  leaseExpiresAt    DateTime?
+  invalidatedAt     DateTime?
+  providerReference String?
+  providerEvidence  Json?
+  publishedAt       DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  business          Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  socialAccount     SocialAccount      @relation(fields: [socialAccountId], references: [id], onDelete: Restrict)
+  scheduledPost     ScheduledPost      @relation(fields: [scheduledPostId], references: [id], onDelete: Cascade)
+  sourceVariant     ContentVariant     @relation(fields: [sourceVariantId], references: [id], onDelete: Cascade)
+  approval          Approval           @relation(fields: [approvalId], references: [id], onDelete: Cascade)
+  attempts          PublishAttempt[]
+
+  @@unique([scheduledPostId, generation])
+  @@index([state, dueAt])
+  @@index([businessId, createdAt])
+  @@index([socialAccountId])
+  @@index([sourceVariantId])
+  @@index([approvalId])
 }
 
 model PostPerformance {

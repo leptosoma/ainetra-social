@@ -1,6 +1,6 @@
 # P6-01 — Publishing Domain Foundation
 
-Status: READY. Primary developer: Claude after a separate implementation request. Codex reviews and runs QA. This packet is planning only; do not start P6-02.
+Status: DONE (implemented in the P6-01 commit). Primary developer: Claude after a separate implementation request. Codex reviews and runs QA. This packet is planning only; do not start P6-02.
 
 Read `CLAUDE.md`, `AGENTS.md`, `docs/product-bible.md`, the Phase 6 section of `docs/roadmap.md`, `docs/current-state.md`, and `docs/oss-architecture-spike.md` (publishing ownership/security). Inspect only `src/features/publishing/service.ts`, `src/features/content/service.ts`, `src/features/approval/service.ts`, `src/test/domain-rules.test.ts`, the relevant `SocialAccount`/`ContentVariant`/`Approval`/`ScheduledPost`/`PublishAttempt`/`MediaAsset` Prisma models, and direct dependencies. Follow the local Next.js docs rule if touching Next.js code.
 

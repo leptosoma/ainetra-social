@@ -2,10 +2,11 @@
 
 Updated: 2026-09-25
 
-- Branch: `cloud/p5-5b-mobile`; tag `phase-5.5-complete`.
+- Branch: `cloud/p6-01-publishing`; last phase tag `phase-5.5-complete`. Phase 6 Publishing IN PROGRESS (P6-01 DONE).
 - Verified product baseline: `phase-4-complete`.
+- Validation (P6-01): 303/303 Vitest tests pass, including 22 new publishing-foundation tests; lint, production build, and npm audit (0 vulnerabilities) pass. The new migration applies to development, test, and a fresh empty database; `prisma migrate status` is up to date and schema-vs-database diff reports no drift. Pre-existing `ScheduledPost`/`PublishAttempt` rows remained valid with null new columns and no intent backfill. Local run used PostgreSQL 16 (Docker/PostgreSQL 17 unavailable in that environment).
 - Validation (P5.5B): 281/281 Vitest tests pass, including 18 new mobile/capture tests and the 26 P5.5A calendar tests; lint, production build, and npm audit (0 vulnerabilities) pass. Prisma validate, migrate status (development and test), and schema-vs-database diff report no drift. A Playwright/Chromium session on iPhone 13, Pixel 5, 1024px tablet, and 1366px desktop viewports passed 44/44 checks (dock, safe spacing, sheet focus/Escape, contextual upload, calendar views, drawer, desktop regression).
-- Development and test databases: all 13 migrations applied; `prisma migrate status` reports both schemas up to date.
+- Development and test databases: all 14 migrations applied; `prisma migrate status` reports both schemas up to date.
 - Live Phase 4 validation: Content Stock reports 3/43 for the current 30-day window; 43 current active requirements are counted and 6 superseded-plan items are excluded.
 - Capture reconciliation: all 39 current ACTIVE/MISSING requirements have one CaptureRequest; 34 are open, 5 are expired, with no duplicates or invalid open rows.
 
@@ -24,6 +25,7 @@ Updated: 2026-09-25
 - `20260923090000_brand_style`
 - `20260923140000_social_variants_creative`
 - `20260923150000_fallback_designed_creative`
+- `20260925100000_publishing_foundation`
 
 ## Implemented modules
 
@@ -46,6 +48,8 @@ Updated: 2026-09-25
 
 - P5.5B Mobile Navigation & Capture-First UX: at ≤820px the desktop sidebar is replaced by a slim top bar with an `İşletmem` menu (İçerik Planı, Kreatif, Marka, Sosyal Strateji, Business Brain, Ayarlar, sign-out) and a safe-area-aware bottom dock (Bugün, Takvim, central capture, İçerikler, Medya); both read one shared route list so no capability is lost. The capture sheet offers the current CaptureRequest first (e.g. “Cuma gönderisi için fotoğraf çek” with its sector guidance), then Fotoğraf çek / Video çek / Galeriden yükle via native file inputs with `capture="environment"` and gallery fallback, and `Ainetra ile içerik hazırla` routing to the existing content-plan/fallback flow. Contextual uploads send only the CaptureRequest id; the server derives business, tag, and media type, rejects stale/closed/expired or other-tenant requests, then uses the existing media validation and fulfilment. Current capture work is read-only and excludes replaced, superseded, requirement-changed, fulfilled, dismissed, or past-due (business-local) requests. Mobile Bugün uses the calendar projection for business-local today plus upcoming actions. The mobile calendar offers Gün/3 gün/Hafta/Ay (concise month with status dots) from the same projection and shares the event drawer as a bottom sheet; FullCalendar mounts only above 820px. `npm run dev`/`start` default to port 3001. No schema change.
 
+- P6-01 Publishing Domain Foundation (no external calls, no worker, no UI): `PublishIntent` is the PostgreSQL outbox row per `(scheduledPostId, generation)` with a unique stable idempotency key, the target adapter route (`meta-native` v1 for Instagram/Facebook), and a versioned (v1) immutable snapshot of the approved current version (caption, CTA, language, content type, platform, format metadata, media identity/provenance, target account, scheduled time, variant/version/approval IDs) plus a deterministic `sha256` hash. `requestPublishIntent(userId, scheduledPostId, expectedVersion)` re-validates membership, SCHEDULED status, current approval/version, account business/platform/`CONNECTED`, and media tenancy in one Serializable transaction; repeated or concurrent equivalent requests return the same intent, a changed snapshot conflicts, and no attempt is created. Content edits invalidate unsent intents in the same transaction without rewriting snapshots; an in-flight intent becomes `UNKNOWN` for reconciliation. `intent-state.ts` is the single transition module (target derived from evidence; timeouts and expired leases yield `UNKNOWN`, `UNKNOWN` resolves only via reconciliation evidence, terminal states are final, stale/duplicate transitions conflict). `ScheduledPost.PUBLISHED` is set only with provider evidence. `PublishAttempt` gained nullable intent link, attempt number, outcome class, provider reference, redacted diagnostics, completion time, and an `UNKNOWN` status. `PublishingAdapter` is a types-only provider-neutral contract (capabilities, opaque credential handle, media preparation, submit, status/reconcile by provider reference and idempotency key, cancel); no Meta/Postiz implementation exists. `checkPublishIntentDispatchable` defines the pre-dispatch revalidation (tenant/account, schedule, approval/version, snapshot hash).
+
 ## Incomplete modules and debt
 
 - Verified social proof has no production data source yet, so the fallback engine safely skips that rank rather than inventing evidence.
@@ -60,6 +64,8 @@ Updated: 2026-09-25
 
 - P5.5B native camera behavior was validated with Chromium device emulation only; real iOS Safari/Android Chrome capture, permission, cancellation, HEIC conversion, and large interrupted video uploads still need field testing. Generic (non-task) captures are stored untagged in the media library.
 
+- P6-01 adds no caller for `requestPublishIntent` outside tests, no adapter implementation, no lease/claim worker, retry budget, or reconciliation loop; those belong to P6-02..P6-05. `SocialAccount.CONNECTED` is still a placeholder, not proof of an OAuth credential.
+
 ## Next task
 
-Phase 5.5 is COMPLETE (P5.5A and P5.5B done, tag `phase-5.5-complete`). Phase 6 Publishing is READY, but no implementation has started. P6-01 Publishing Domain Foundation is READY with a focused packet at `claude-tasks/P6-01-publishing-foundation.md`; the remaining Phase 6 tasks are planned in `docs/roadmap.md`. The current publishing baseline is `ScheduledPost`, `PublishAttempt`, approval/version checks, and edit-time schedule invalidation; there is no delivery worker, Meta OAuth/API, or transactional publish outbox yet.
+Phase 6 Publishing is IN PROGRESS, not complete. P6-01 Publishing Domain Foundation is DONE. Next: P6-02 Meta Account Connection (secure native Instagram/Facebook OAuth, tenant/account mapping, encrypted token boundary; no publication). Its task packet has not been prepared yet; see `docs/roadmap.md`.

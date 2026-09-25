@@ -2,7 +2,7 @@
 
 ## Active phase
 
-Phase 5.5 — Simple Experience & Calendar Workspace COMPLETE. Phase 6 Publishing is READY for implementation; no Phase 6 code has started.
+Phase 6 — Publishing IN PROGRESS. P6-01 Publishing Domain Foundation is DONE; Phase 6 is not complete. Phase 5.5 is COMPLETE.
 
 ## Done
 
@@ -23,10 +23,11 @@ Phase 5.5 — Simple Experience & Calendar Workspace COMPLETE. Phase 6 Publishin
 - P5.5A Calendar Workspace & Dashboard Simplification.
 - P5.5B Mobile Navigation & Capture-First UX. DONE.
 - Phase 5.5 Simple Experience & Calendar Workspace. COMPLETE.
+- P6-01 Publishing Domain Foundation. DONE.
 
 ## Ready
 
-- P6-01 Publishing Domain Foundation. Task packet prepared at `claude-tasks/P6-01-publishing-foundation.md`; implementation has not started.
+- P6-02 Meta Account Connection. Next task; task packet not yet prepared (see `docs/roadmap.md`).
 
 ## Backlog
 
@@ -40,4 +41,5 @@ Phase 5.5 — Simple Experience & Calendar Workspace COMPLETE. Phase 6 Publishin
 - Ainetra Intent Engine — future shared capability for public social intent signals in Ainetra Social and accepted lead/pipeline opportunities in Ainetra Sales. Documentation only; no Phase 5 implementation.
 - Field-test native `capture` file inputs on real iOS Safari and Android Chrome (permissions, cancellation, orientation, HEIC-to-JPEG conversion, interrupted large video uploads); automated checks used Chromium device emulation only.
 - The layout's capture prompt reads existing CaptureRequests read-only; a plan whose requests have not yet been reconciled shows its prompt after the next dashboard/content-plan load.
+- P6-01 follow-ups for later Phase 6 tasks: nothing enqueues publish intents yet (`requestPublishIntent` is invoked only by tests until P6-03/P6-04 flows call it); `CONNECTED` remains a placeholder and P6-02/P6-03 must validate the real credential at delivery; the adapter contract has no implementation; claiming/leasing, retry budget, and reconciliation loops are P6-04/P6-05. Local P6-01 validation ran on PostgreSQL 16 because PostgreSQL 17/Docker were unavailable in that environment.
 - Phase 7 Analytics + Learning.

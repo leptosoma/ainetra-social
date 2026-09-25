@@ -3,6 +3,7 @@ import { requireMembership } from "@/lib/authorization";
 import { DomainError } from "@/lib/domain-error";
 import { contentInputSchema, variantUpdateSchema } from "./schemas";
 import { recordMediaUsage } from "@/features/media-usage/service";
+import { invalidatePublishIntentsForVariant } from "@/features/publishing/intent";
 
 async function assertMediaBelongsToBusiness(mediaAssetId: string | null | undefined, businessId: string) {
   if (!mediaAssetId) return;
@@ -76,9 +77,12 @@ export async function updateContentVariant(userId: string, variantId: string, in
         version: { increment: 1 },
       },
     });
+    const now = new Date();
+    // Önce intent'ler: filtre, henüz SCHEDULED olan postlara bakar.
+    await invalidatePublishIntentsForVariant(tx, variantId, now);
     await tx.scheduledPost.updateMany({
       where: { contentVariantId: variantId, status: "SCHEDULED" },
-      data: { status: "INVALIDATED", invalidatedAt: new Date() },
+      data: { status: "INVALIDATED", invalidatedAt: now },
     });
     return updated;
   }, { isolationLevel: "Serializable" });
