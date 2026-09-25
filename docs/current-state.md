@@ -2,7 +2,7 @@
 
 Updated: 2026-09-25
 
-- Branch: `cloud/p6-01-publishing`; last phase tag `phase-5.5-complete`. Phase 6 Publishing IN PROGRESS (P6-01 DONE).
+- Branch: `cloud/p6-02-meta-account`; last phase tag `phase-5.5-complete`. Phase 6 Publishing IN PROGRESS (P6-01 DONE; P6-02 READY, not implemented).
 - Verified product baseline: `phase-4-complete`.
 - Validation (P6-01): 303/303 Vitest tests pass, including 22 new publishing-foundation tests; lint, production build, and npm audit (0 vulnerabilities) pass. The new migration applies to development, test, and a fresh empty database; `prisma migrate status` is up to date and schema-vs-database diff reports no drift. Pre-existing `ScheduledPost`/`PublishAttempt` rows remained valid with null new columns and no intent backfill. Local run used PostgreSQL 16 (Docker/PostgreSQL 17 unavailable in that environment).
 - Validation (P5.5B): 281/281 Vitest tests pass, including 18 new mobile/capture tests and the 26 P5.5A calendar tests; lint, production build, and npm audit (0 vulnerabilities) pass. Prisma validate, migrate status (development and test), and schema-vs-database diff report no drift. A Playwright/Chromium session on iPhone 13, Pixel 5, 1024px tablet, and 1366px desktop viewports passed 44/44 checks (dock, safe spacing, sheet focus/Escape, contextual upload, calendar views, drawer, desktop regression).
@@ -68,4 +68,4 @@ Updated: 2026-09-25
 
 ## Next task
 
-Phase 6 Publishing is IN PROGRESS, not complete. P6-01 Publishing Domain Foundation is DONE. Next: P6-02 Meta Account Connection (secure native Instagram/Facebook OAuth, tenant/account mapping, encrypted token boundary; no publication). Its task packet has not been prepared yet; see `docs/roadmap.md`.
+Phase 6 Publishing is IN PROGRESS, not complete. P6-01 Publishing Domain Foundation is DONE. Next: P6-02 Meta Account Connection (secure native Instagram/Facebook OAuth, tenant/account mapping, encrypted token boundary; no publication) is READY, not implemented. Its planning packet is `claude-tasks/P6-02-meta-account-connection.md`. Current Meta version/token/App Review details are an explicit pre-implementation verification gate because Meta developer pages were access-limited during packet preparation.

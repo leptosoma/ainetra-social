@@ -27,7 +27,7 @@ Phase 6 — Publishing IN PROGRESS. P6-01 Publishing Domain Foundation is DONE; 
 
 ## Ready
 
-- P6-02 Meta Account Connection. Next task; task packet not yet prepared (see `docs/roadmap.md`).
+- P6-02 Meta Account Connection. READY; planning packet: `claude-tasks/P6-02-meta-account-connection.md`. Implementation not started.
 
 ## Backlog
 
