@@ -19,6 +19,8 @@ export async function uploadMediaAction(formData: FormData) {
   await uploadMedia(await userId(), String(formData.get("businessId") ?? ""), file, formData.getAll("tags").map(String));
   revalidatePath("/media");
   revalidatePath("/content-plan");
+  revalidatePath("/calendar");
+  revalidatePath("/dashboard");
 }
 
 export async function updateMediaPlanningTagsAction(formData: FormData) {

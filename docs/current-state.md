@@ -1,10 +1,10 @@
 # Current State
 
-Updated: 2026-09-23
+Updated: 2026-09-25
 
 - Branch: `feature/capture-fallback`
 - Verified product baseline: `phase-4-complete`.
-- Validation: 237/237 Vitest tests pass; lint (0 warnings), production build, and npm audit (0 vulnerabilities) pass. The full suite was run directly against the migrated test database. Prisma migrate status succeeds for development and test databases.
+- Validation: 263/263 Vitest tests pass, including 26 targeted calendar tests; lint, production build, and npm audit (0 vulnerabilities) pass. Prisma migrate status succeeds for development and test databases.
 - Development and test databases: all 13 migrations applied; `prisma migrate status` reports both schemas up to date.
 - Live Phase 4 validation: Content Stock reports 3/43 for the current 30-day window; 43 current active requirements are counted and 6 superseded-plan items are excluded.
 - Capture reconciliation: all 39 current ACTIVE/MISSING requirements have one CaptureRequest; 34 are open, 5 are expired, with no duplicates or invalid open rows.
@@ -42,6 +42,7 @@ Updated: 2026-09-23
 - Creative Campaign makes clearly labeled designed graphics from canonical confirmed Business Brain facts and optional accepted authentic media. The deterministic `development-template-local` provider is non-generative. Missing facts block creation; fact, brand, and platform-rule snapshots preserve history. Explicit keep creates a MediaAsset tagged only `CUSTOM_GRAPHIC`; it cannot satisfy authentic photo/video requirements. Fallback ranks it as an existing designed creative, separately from authentic media, with recency and plan-version safeguards.
 - Creative Campaign sector policy resolves `HOSPITALITY_STANDARD`, `FOOD_STRICT_AUTHENTIC`, or `HEALTH_STRICT_COMPLIANCE` from `Business.sector`; unknown sectors use the strictest profile. Authenticity and current canonical confirmed facts outrank sector policy, which outranks brand style. All three profiles require explicit keep and disallow generative imagery without semantic output verification. Health limits creative categories, blocks high-risk result claims even when confirmed, and requires an additional acceptance at keep. Keep revalidates the current sector and referenced fact identities/values in the same Serializable transaction.
 - P5-05 integration tests cover upload/analysis/derivative lineage through Social Variant, designed creative separation, Content Stock/Fallback suitability, cross-tenant denial, original and Business Brain immutability, and no implicit approval, scheduling, publishing, or MediaUsage recording. Existing per-feature tests cover versioning, provider honesty, failures, and concurrency.
+- P5.5A Calendar Workspace uses FullCalendar Standard/MIT 6.1.21 for day, week, month, and year layout. Ainetra's read-only projection joins current ACTIVE plan items with tenant-scoped scheduled posts, merges linked work once at the scheduled business-local date, and carries media needs, current approval/version checks, and capture guidance into plain Turkish event states. The drawer routes to existing upload, content, media, and fallback actions without implicit plan, approval, reschedule, or publishing mutations. The dashboard uses the same projection for weekly planned/ready/action counts and next tasks.
 
 ## Incomplete modules and debt
 
@@ -53,7 +54,8 @@ Updated: 2026-09-23
 - Brand Style maps tone preferences to pixel adjustments with a small deterministic rule set; it is an explainable product heuristic over user preferences, not a measured visual-identity model.
 - P5-04 local providers are deterministic development implementations; production AI/image providers and measured subject-aware cropping are not configured. Long confirmed text may overflow the narrowest creative templates, and Feed/Square can duplicate a 1:1 choice; these are non-blocking UX follow-ups.
 - Sector classification currently uses a short Turkish/English keyword map. Unknown sectors are intentionally strict; restricted-claim matching uses deterministic phrases and is not a semantic or legal review. The applied policy is re-resolved at keep rather than snapshotted in each historical row.
+- P5.5A keeps drag/drop rescheduling disabled until a server mutation can enforce tenant, plan/version, timezone, conflict, and approval checks. The calendar routes Ainetra help to the existing content-plan flow; a direct item-level help orchestration remains unconnected. FullCalendar's month/year density and drawer focus behavior have static/code validation but no browser-based visual or keyboard session yet.
 
 ## Next task
 
-P5-05 integration review passed; Phase 5 is complete. The next recommended activity is an OSS Architecture Spike for reusable infrastructure, subject to user approval. Phase 5.5A Calendar Workspace & Dashboard Simplification and P5.5B Mobile Navigation & Capture-First UX remain documentation-only future work; neither has started.
+P5.5A Calendar Workspace & Dashboard Simplification is complete. P5.5B Mobile Navigation & Capture-First UX is READY and has not started. Phase 5.5 is not complete.

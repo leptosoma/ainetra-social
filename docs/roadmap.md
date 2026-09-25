@@ -37,13 +37,15 @@ Visual Intelligence must preserve factual reality in authentic media, distinguis
 
 P5-05 verified the cross-module authentic derivative and designed-creative flows, tenant isolation, explicit media decisions, Content Stock/Fallback separation, and no implicit content approval or publication. Creative Campaign now resolves a conservative sector policy from the business sector: hospitality, food, or health. Unknown sectors use the strictest profile. All output remains fact-grounded and human-reviewed; health additionally requires an explicit acceptance, and current policies allow deterministic graphic templates only.
 
-The **OSS Architecture Spike** is documented in [oss-architecture-spike.md](oss-architecture-spike.md). Recommended direction only: FullCalendar Standard for desktop calendar rendering with an Ainetra-owned mobile Today/3-day/Week and capture UI; keep Sharp, defer BullMQ/tusd/imgproxy, and use bounded FFmpeg tooling when video processing begins. Phase 6 should own a `PublishingAdapter`, transactional publication intent and tenant-safe reconciliation. Pilot Postiz behind the adapter subject to legal/security/operations gates; use a minimal native Meta adapter for first production Instagram/Facebook unless that pilot passes. Mixpost Lite does not meet Instagram/API needs, and paid-tier SaaS rights require separate review. No Phase 5.5 or Phase 6 implementation has started.
+The **OSS Architecture Spike** is documented in [oss-architecture-spike.md](oss-architecture-spike.md). FullCalendar Standard is now used for the P5.5A desktop calendar; the Ainetra-owned mobile Today/3-day/Week and capture UI remains P5.5B work. Keep Sharp, defer BullMQ/tusd/imgproxy, and use bounded FFmpeg tooling when video processing begins. Phase 6 should own a `PublishingAdapter`, transactional publication intent and tenant-safe reconciliation. Pilot Postiz behind the adapter subject to legal/security/operations gates; use a minimal native Meta adapter for first production Instagram/Facebook unless that pilot passes. Mixpost Lite does not meet Instagram/API needs, and paid-tier SaaS rights require separate review. Phase 6 has not started.
 
-## Phase 5.5 — Future: Simple Experience & Calendar Workspace
+## Phase 5.5 — In Progress: Simple Experience & Calendar Workspace
 
-After Visual Intelligence and before or alongside Publishing integration, simplify the customer experience without weakening the internal engines. This phase is documented and not started.
+After Visual Intelligence and before or alongside Publishing integration, simplify the customer experience without weakening the internal engines. P5.5A is complete; P5.5B is ready. The phase as a whole is not complete.
 
 ### P5.5A — Calendar Workspace & Dashboard Simplification
+
+**DONE.** FullCalendar Standard/MIT 6.1.21 renders the day, week, month, and year views. Ainetra owns the tenant-scoped active-plan/scheduled-post projection, business-timezone dates, Turkish action states, event drawer, and dashboard weekly summary. Linked plan/post work is counted once, including when the scheduled date crosses a week boundary. Only existing upload, content, media, and fallback routes are offered; drag/drop and publishing remain disabled.
 
 - Make the calendar a primary workspace with day, week, month, and year views. Mobile may favor Today, 3-day, and Week with Month as an overview; month cells should use simple icons or status dots.
 - Show planned content and plain action states: Ready, Media needed, Planned, User action needed, and Ainetra can help.
@@ -52,6 +54,8 @@ After Visual Intelligence and before or alongside Publishing integration, simpli
 - Put operational priorities first on the dashboard, for example: “Bu hafta 7 içerik planlandı. 5 hazır. 2 senden bir şey bekliyor.” Keep system internals secondary.
 
 ### P5.5B — Mobile Navigation & Capture-First UX
+
+**READY; not started.**
 
 - Treat mobile as a primary capture and upload surface for staff, not a compressed desktop sidebar. Aim for roughly five bottom navigation items: `Bugün`, `Takvim`, a visually dominant central action, `İçerikler`, and `Medya`.
 - The central action may open a compact sheet: `Fotoğraf çek`, `Video çek`, `Galeriden yükle`, `Ainetra ile içerik hazırla`. Prefer a relevant prompt such as “Cuma gönderisi için fotoğraf çek” when the current plan needs it.

@@ -2,7 +2,7 @@
 
 ## Active phase
 
-Phase 5 — Visual Intelligence complete
+Phase 5.5 — Simple Experience & Calendar Workspace in progress
 
 ## Done
 
@@ -20,10 +20,11 @@ Phase 5 — Visual Intelligence complete
 - P5-03 Brand Style.
 - P5-04 Social Variants + Creative Campaign.
 - P5-05 Phase 5 Integration Review.
+- P5.5A Calendar Workspace & Dashboard Simplification.
 
 ## Ready
 
-No implementation task is ready. The next recommended activity is an OSS Architecture Spike, subject to user approval; it is analysis only.
+- P5.5B Mobile Navigation & Capture-First UX. Phone-first navigation, context-aware capture entry, and safe-area support; not started.
 
 ## Backlog
 
@@ -33,8 +34,6 @@ No implementation task is ready. The next recommended activity is an OSS Archite
 - Improve Creative Campaign notice handling for non-fact validation errors and measure long confirmed text before rendering it into narrow templates.
 - Extend the sector keyword map as more real businesses onboard; unknown sectors deliberately use the strictest policy today.
 - Review how to record the sector policy applied at creative generation without weakening decision-time revalidation. Deterministic restricted-claim phrases are a foundation, not semantic or legal review.
-- Phase 5.5A — Calendar Workspace & Dashboard Simplification. Future only: day/week/month/year calendar, plain action states, a content-day media/help flow, and operational dashboard priorities.
-- Phase 5.5B — Mobile Navigation & Capture-First UX. Future only: phone-first bottom navigation with a prominent capture action, context-aware capture prompts, safe-area support, and thumb-friendly interactions.
 - Ainetra product family architecture — future only: Social, Sales, Serve, Control, and a deliberately small shared Core extracted only from proven cross-product needs.
 - Ainetra Intent Engine — future shared capability for public social intent signals in Ainetra Social and accepted lead/pipeline opportunities in Ainetra Sales. Documentation only; no Phase 5 implementation.
 - Phase 6 Publishing.

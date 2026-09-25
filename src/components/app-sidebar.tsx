@@ -4,9 +4,10 @@ import { BrandMark } from "./brand-mark";
 
 const navigation = [
   ["⌂", "Dashboard", "/dashboard"],
+  // P5.5A: takvim birincil çalışma alanı olduğu için panodan hemen sonra gelir.
+  ["□", "Takvim", "/calendar"],
   ["✦", "İçerikler", "/content"],
   ["◫", "İçerik Planı", "/content-plan"],
-  ["□", "Takvim", "/calendar"],
   ["▧", "Medya", "/media"],
   ["◨", "Kreatif", "/creative"],
   ["◇", "Marka", "/brand"],

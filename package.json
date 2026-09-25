@@ -16,6 +16,11 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@fullcalendar/core": "6.1.21",
+    "@fullcalendar/daygrid": "6.1.21",
+    "@fullcalendar/multimonth": "6.1.21",
+    "@fullcalendar/react": "6.1.21",
+    "@fullcalendar/timegrid": "6.1.21",
     "@prisma/adapter-pg": "7.10.0",
     "@prisma/client": "7.10.0",
     "bcryptjs": "3.0.3",
