@@ -2,7 +2,7 @@
 
 Updated: 2026-09-26
 
-- Branch: `cloud/p6-03-meta-submission`; last phase tag `phase-5.5-complete`. Phase 6 Publishing IN PROGRESS (P6-01, P6-02 and P6-03 DONE; P6-04 not started).
+- Branch: `cloud/p6-04-scheduled-worker`; last phase tag `phase-5.5-complete`. Phase 6 Publishing IN PROGRESS (P6-01, P6-02 and P6-03 DONE; P6-04 READY, not implemented).
 - Verified product baseline: `phase-4-complete`.
 - Validation (P6-03): 362/362 Vitest tests pass, including 31 new native Meta publishing tests; lint, production build and npm audit (0 vulnerabilities) pass. The additive migration applies to development, test and a fresh empty database; `prisma migrate status` is up to date and schema-vs-database diff reports no drift. A Playwright/Chromium session against the production build with a harness-only Graph mock covered FB text, IG JPEG (the mock fetched the signed URL cookieless and received the exact JPEG), a future schedule (no button), a timeout (Durum doğrulanmalı, a stale second click did not resend), forged media tokens (404), 390px layout and no secrets in HTML/server log. No live Meta publishing was performed.
 - Validation (P6-02): 331/331 Vitest tests pass, including 28 new Meta connection tests; lint, production build, and npm audit (0 vulnerabilities) pass. The new migration applies to development, test, and a fresh empty database; `prisma migrate status` is up to date and schema-vs-database diff reports no drift. A Playwright/Chromium session against the production build with a harness-only Meta Graph mock passed 35/35 checks (Connect, forged/replayed callback, provider denial, selection, connected, validate, revoked/reauth, reconnect, disconnect, cancel, no secrets in HTML or server log, 390px mobile layout). No live Meta OAuth was performed.
@@ -72,10 +72,10 @@ Updated: 2026-09-26
 
 - P6-02 was verified with a fake Graph client and a harness fetch mock only; live Meta OAuth, App Review/Advanced Access, Business Verification, Live-mode requirements and a non-role customer test are still open. Deauthorization/data-deletion webhooks are not implemented; Business Manager-granted Page roles that need `ads_read`/`ads_management` are not supported. Expired pending attempts are purged lazily, with no scheduled sweeper.
 
-- P6-01 adds no caller for `requestPublishIntent` outside tests, no adapter implementation, no lease/claim worker, retry budget, or reconciliation loop; those belong to P6-02..P6-05. `requestPublishIntent` still checks `SocialAccount.status` only; P6-03 must resolve and revalidate the Meta credential at dispatch.
+- P6-03 now calls `requestPublishIntent` for explicit due-now publication and resolves/revalidates the Meta credential before dispatch. The scheduled worker, bounded automatic retry and reconciliation loop remain P6-04/P6-05 work; the worker must reuse P6-03's claim and submission path without a browser session.
 
 - P6-03 publishes only Instagram single JPEG and Facebook Page text/single JPEG-PNG posts through an explicit due-now "Yayınla" action on the content page; there is no scheduled worker, retry worker or reconciliation. It was verified with deterministic fakes and a harness fetch mock only; live Meta publishing, App Review for `instagram_content_publish`/`pages_manage_posts`, PPA and a public HTTPS media origin are still open. Publish permission is requested per account through an explicit "Yayın izni ver" reauthorization. UNKNOWN is never resubmitted and waits for P6-05.
 
 ## Next task
 
-Phase 6 Publishing is IN PROGRESS, not complete. P6-01, P6-02 and P6-03 Native Meta Submission are DONE. Next: P6-04 PostgreSQL Scheduled Worker (planned; needs a task packet and explicit go-ahead). Live Meta publishing has not been tested.
+Phase 6 Publishing is IN PROGRESS, not complete. P6-01, P6-02 and P6-03 Native Meta Submission are DONE. Next: P6-04 PostgreSQL Scheduled Worker is READY, not implemented; packet: `claude-tasks/P6-04-postgres-scheduled-worker.md`. The packet preserves the P6-03 submission path and UNKNOWN safety, and requires a separately deployed PostgreSQL worker. Live Meta publishing has not been tested.
