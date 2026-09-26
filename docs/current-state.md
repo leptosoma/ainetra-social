@@ -2,7 +2,7 @@
 
 Updated: 2026-09-25
 
-- Branch: `cloud/p6-02-meta-account`; last phase tag `phase-5.5-complete`. Phase 6 Publishing IN PROGRESS (P6-01 and P6-02 DONE; P6-03 not started).
+- Branch: `cloud/p6-03-meta-submission`; last phase tag `phase-5.5-complete`. Phase 6 Publishing IN PROGRESS (P6-01 and P6-02 DONE; P6-03 READY, not implemented).
 - Verified product baseline: `phase-4-complete`.
 - Validation (P6-02): 331/331 Vitest tests pass, including 28 new Meta connection tests; lint, production build, and npm audit (0 vulnerabilities) pass. The new migration applies to development, test, and a fresh empty database; `prisma migrate status` is up to date and schema-vs-database diff reports no drift. A Playwright/Chromium session against the production build with a harness-only Meta Graph mock passed 35/35 checks (Connect, forged/replayed callback, provider denial, selection, connected, validate, revoked/reauth, reconnect, disconnect, cancel, no secrets in HTML or server log, 390px mobile layout). No live Meta OAuth was performed.
 - Validation (P6-01): 303/303 Vitest tests pass, including 22 new publishing-foundation tests; lint, production build, and npm audit (0 vulnerabilities) pass. The new migration applies to development, test, and a fresh empty database; `prisma migrate status` is up to date and schema-vs-database diff reports no drift. Pre-existing `ScheduledPost`/`PublishAttempt` rows remained valid with null new columns and no intent backfill. Local run used PostgreSQL 16 (Docker/PostgreSQL 17 unavailable in that environment).
@@ -74,4 +74,4 @@ Updated: 2026-09-25
 
 ## Next task
 
-Phase 6 Publishing is IN PROGRESS, not complete. P6-01 Publishing Domain Foundation and P6-02 Meta Account Connection are DONE. Next: P6-03 Native Meta Submission (planned; needs a task packet and explicit go-ahead). It must resolve the credential through the P6-02 boundary, revalidate it at dispatch, and review publishing permissions (`instagram_content_publish`, Facebook Page publishing) before requesting them.
+Phase 6 Publishing is IN PROGRESS, not complete. P6-01 Publishing Domain Foundation and P6-02 Meta Account Connection are DONE. Next: P6-03 Native Meta Submission is READY, not implemented; packet: `claude-tasks/P6-03-native-meta-submission.md`. It covers explicit due-now Instagram single JPEG and Facebook Page text/single-photo submission, with a production media-delivery boundary and P6-02 credential revalidation. Live Meta publishing has not been tested.

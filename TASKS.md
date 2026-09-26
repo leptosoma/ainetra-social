@@ -28,7 +28,7 @@ Phase 6 — Publishing IN PROGRESS. P6-01 Publishing Domain Foundation and P6-02
 
 ## Ready
 
-- P6-03 Native Meta Submission. Planned; needs a task packet and explicit go-ahead.
+- P6-03 Native Meta Submission. READY; packet: `claude-tasks/P6-03-native-meta-submission.md`. Implementation not started; explicit go-ahead still required.
 
 ## Backlog
 
