@@ -1,13 +1,14 @@
 # Current State
 
-Updated: 2026-09-25
+Updated: 2026-09-26
 
-- Branch: `cloud/p6-03-meta-submission`; last phase tag `phase-5.5-complete`. Phase 6 Publishing IN PROGRESS (P6-01 and P6-02 DONE; P6-03 READY, not implemented).
+- Branch: `cloud/p6-03-meta-submission`; last phase tag `phase-5.5-complete`. Phase 6 Publishing IN PROGRESS (P6-01, P6-02 and P6-03 DONE; P6-04 not started).
 - Verified product baseline: `phase-4-complete`.
+- Validation (P6-03): 362/362 Vitest tests pass, including 31 new native Meta publishing tests; lint, production build and npm audit (0 vulnerabilities) pass. The additive migration applies to development, test and a fresh empty database; `prisma migrate status` is up to date and schema-vs-database diff reports no drift. A Playwright/Chromium session against the production build with a harness-only Graph mock covered FB text, IG JPEG (the mock fetched the signed URL cookieless and received the exact JPEG), a future schedule (no button), a timeout (Durum doğrulanmalı, a stale second click did not resend), forged media tokens (404), 390px layout and no secrets in HTML/server log. No live Meta publishing was performed.
 - Validation (P6-02): 331/331 Vitest tests pass, including 28 new Meta connection tests; lint, production build, and npm audit (0 vulnerabilities) pass. The new migration applies to development, test, and a fresh empty database; `prisma migrate status` is up to date and schema-vs-database diff reports no drift. A Playwright/Chromium session against the production build with a harness-only Meta Graph mock passed 35/35 checks (Connect, forged/replayed callback, provider denial, selection, connected, validate, revoked/reauth, reconnect, disconnect, cancel, no secrets in HTML or server log, 390px mobile layout). No live Meta OAuth was performed.
 - Validation (P6-01): 303/303 Vitest tests pass, including 22 new publishing-foundation tests; lint, production build, and npm audit (0 vulnerabilities) pass. The new migration applies to development, test, and a fresh empty database; `prisma migrate status` is up to date and schema-vs-database diff reports no drift. Pre-existing `ScheduledPost`/`PublishAttempt` rows remained valid with null new columns and no intent backfill. Local run used PostgreSQL 16 (Docker/PostgreSQL 17 unavailable in that environment).
 - Validation (P5.5B): 281/281 Vitest tests pass, including 18 new mobile/capture tests and the 26 P5.5A calendar tests; lint, production build, and npm audit (0 vulnerabilities) pass. Prisma validate, migrate status (development and test), and schema-vs-database diff report no drift. A Playwright/Chromium session on iPhone 13, Pixel 5, 1024px tablet, and 1366px desktop viewports passed 44/44 checks (dock, safe spacing, sheet focus/Escape, contextual upload, calendar views, drawer, desktop regression).
-- Development and test databases: all 15 migrations applied; `prisma migrate status` reports both schemas up to date.
+- Development and test databases: all migrations through `20260926090000_native_meta_publishing` applied; `prisma migrate status` reports both schemas up to date.
 - Live Phase 4 validation: Content Stock reports 3/43 for the current 30-day window; 43 current active requirements are counted and 6 superseded-plan items are excluded.
 - Capture reconciliation: all 39 current ACTIVE/MISSING requirements have one CaptureRequest; 34 are open, 5 are expired, with no duplicates or invalid open rows.
 
@@ -28,6 +29,7 @@ Updated: 2026-09-25
 - `20260923150000_fallback_designed_creative`
 - `20260925100000_publishing_foundation`
 - `20260925140000_meta_account_connection`
+- `20260926090000_native_meta_publishing`
 
 ## Implemented modules
 
@@ -72,6 +74,8 @@ Updated: 2026-09-25
 
 - P6-01 adds no caller for `requestPublishIntent` outside tests, no adapter implementation, no lease/claim worker, retry budget, or reconciliation loop; those belong to P6-02..P6-05. `requestPublishIntent` still checks `SocialAccount.status` only; P6-03 must resolve and revalidate the Meta credential at dispatch.
 
+- P6-03 publishes only Instagram single JPEG and Facebook Page text/single JPEG-PNG posts through an explicit due-now "Yayınla" action on the content page; there is no scheduled worker, retry worker or reconciliation. It was verified with deterministic fakes and a harness fetch mock only; live Meta publishing, App Review for `instagram_content_publish`/`pages_manage_posts`, PPA and a public HTTPS media origin are still open. Publish permission is requested per account through an explicit "Yayın izni ver" reauthorization. UNKNOWN is never resubmitted and waits for P6-05.
+
 ## Next task
 
-Phase 6 Publishing is IN PROGRESS, not complete. P6-01 Publishing Domain Foundation and P6-02 Meta Account Connection are DONE. Next: P6-03 Native Meta Submission is READY, not implemented; packet: `claude-tasks/P6-03-native-meta-submission.md`. It covers explicit due-now Instagram single JPEG and Facebook Page text/single-photo submission, with a production media-delivery boundary and P6-02 credential revalidation. Live Meta publishing has not been tested.
+Phase 6 Publishing is IN PROGRESS, not complete. P6-01, P6-02 and P6-03 Native Meta Submission are DONE. Next: P6-04 PostgreSQL Scheduled Worker (planned; needs a task packet and explicit go-ahead). Live Meta publishing has not been tested.

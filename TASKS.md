@@ -2,7 +2,7 @@
 
 ## Active phase
 
-Phase 6 — Publishing IN PROGRESS. P6-01 Publishing Domain Foundation and P6-02 Meta Account Connection are DONE; Phase 6 is not complete. Phase 5.5 is COMPLETE.
+Phase 6 — Publishing IN PROGRESS. P6-01 Publishing Domain Foundation, P6-02 Meta Account Connection and P6-03 Native Meta Submission are DONE; Phase 6 is not complete. Phase 5.5 is COMPLETE.
 
 ## Done
 
@@ -25,10 +25,11 @@ Phase 6 — Publishing IN PROGRESS. P6-01 Publishing Domain Foundation and P6-02
 - Phase 5.5 Simple Experience & Calendar Workspace. COMPLETE.
 - P6-01 Publishing Domain Foundation. DONE.
 - P6-02 Meta Account Connection. DONE.
+- P6-03 Native Meta Submission. DONE (deterministic Meta mocks only; live Meta publishing not validated).
 
 ## Ready
 
-- P6-03 Native Meta Submission. READY; packet: `claude-tasks/P6-03-native-meta-submission.md`. Implementation not started; explicit go-ahead still required.
+- P6-04 PostgreSQL Scheduled Worker. Planned; needs a task packet and explicit go-ahead.
 
 ## Backlog
 
@@ -45,3 +46,4 @@ Phase 6 — Publishing IN PROGRESS. P6-01 Publishing Domain Foundation and P6-02
 - P6-01 follow-ups for later Phase 6 tasks: nothing enqueues publish intents yet (`requestPublishIntent` is invoked only by tests until P6-03/P6-04 flows call it); `CONNECTED` remains a placeholder and P6-02/P6-03 must validate the real credential at delivery; the adapter contract has no implementation; claiming/leasing, retry budget, and reconciliation loops are P6-04/P6-05. Local P6-01 validation ran on PostgreSQL 16 because PostgreSQL 17/Docker were unavailable in that environment.
 - P6-02 follow-ups: live Meta validation has not been performed (no Meta app credentials in the build environment); OAuth, discovery, selection, reconnect and disconnect were verified with a deterministic fake Graph client and a harness-only fetch mock. Before onboarding non-role customers, confirm Live mode, Advanced Access/App Review for `pages_show_list`, `instagram_basic`, `pages_read_engagement`, Business Verification if Meta requires it, the redirect domain, privacy policy and data-deletion callback, and run a provider test with a non-role account. Business Manager-granted Page roles may additionally need `ads_read`/`ads_management`; these are not requested and such users currently get an honest validation failure. Meta deauthorization/data-deletion webhooks are not implemented, so provider-side revocation is detected only by explicit validation (and must be rechecked at P6-03 dispatch). Disconnect removes the local credential only; provider-side revocation is not requested because app-level deauthorization would affect the Meta user's other connections. `requestPublishIntent` still checks `SocialAccount.status` only; P6-03 must resolve the credential through `getMetaAccountConnection` and revalidate it. Pending attempts expire after 10 minutes and are purged on the next connection start or selection access; there is no scheduled sweeper. Settings keeps using the first business membership as before.
 - Phase 7 Analytics + Learning.
+- P6-03 follow-ups: live Meta publishing needs a Live-mode app with approved `instagram_content_publish`/`pages_manage_posts`, a public HTTPS `PUBLIC_APP_URL`, `MEDIA_DELIVERY_SECRET`, Page CREATE_CONTENT/PPA and real IG/FB test accounts. UNKNOWN intents and PENDING attempts left by a crashed process wait for P6-05 reconciliation; RETRY_WAIT is retried only by an explicit user click until P6-04. Page tasks are the ones stored at connection time (debug_token rechecks scopes, not tasks).

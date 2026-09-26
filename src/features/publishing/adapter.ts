@@ -67,6 +67,9 @@ export type PrepareMediaRequest = {
   snapshot: PublishSnapshotV1;
   target: AccountConnection;
   idempotencyKey: string;
+  /** P6-03: intent ve kiralamayı kazanan deneme; kısa ömürlü medya teslimi bunlara bağlanır. */
+  intentId: string;
+  attemptId: string;
 };
 
 export type PreparedMedia = {
@@ -87,6 +90,7 @@ export type SubmitRequest = {
   idempotencyKey: string;
   target: AccountConnection;
   preparedMedia: PreparedMedia[];
+  attemptId: string;
 };
 
 export type UnknownOutcomeReason = "TIMEOUT" | "TRANSPORT_ERROR" | "PROVIDER_AMBIGUOUS" | "LEASE_EXPIRED";

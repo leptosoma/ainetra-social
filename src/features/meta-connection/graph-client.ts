@@ -19,7 +19,7 @@ export type MetaErrorKind = "PROVIDER" | "TIMEOUT" | "TRANSPORT" | "INVALID_RESP
 export class MetaGraphError extends Error {
   constructor(
     public readonly kind: MetaErrorKind,
-    public readonly details: { httpStatus?: number; code?: number; subcode?: number; type?: string } = {},
+    public readonly details: { httpStatus?: number; code?: number; subcode?: number; type?: string; isTransient?: boolean; traceId?: string } = {},
   ) {
     super(`Meta request failed (${kind}${details.code !== undefined ? ` ${details.code}` : ""})`);
     this.name = "MetaGraphError";
@@ -116,38 +116,68 @@ async function readLimitedJson(response: Response): Promise<unknown> {
   }
 }
 
-export function createMetaGraphClient(config: MetaConfig, fetchImpl: typeof fetch = fetch): MetaGraphClient {
-  const appSecretProof = (token: string) => createHmac("sha256", config.appSecret).update(token).digest("hex");
+type MetaRequestInit = {
+  method: "GET" | "POST";
+  query?: Record<string, string>;
+  form?: Record<string, string>;
+  multipart?: FormData;
+  bearer?: string;
+  timeoutMs?: number;
+};
 
-  async function request(path: string, init: { method: "GET" | "POST"; query?: Record<string, string>; form?: Record<string, string>; bearer?: string }) {
+const TRACE_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** Ortak, sınırlandırılmış Graph isteği. Hata yalnızca kapalı alanlarla (kod, alt kod, tür, izleme kimliği) döner. */
+function createMetaRequester(config: MetaConfig, fetchImpl: typeof fetch) {
+  return async function request(path: string, init: MetaRequestInit) {
     const url = new URL(`${config.graphBaseUrl}/${path}`);
     for (const [key, value] of Object.entries(init.query ?? {})) url.searchParams.set(key, value);
     const headers: Record<string, string> = { Accept: "application/json" };
     if (init.bearer) headers.Authorization = `Bearer ${init.bearer}`;
-    let body: URLSearchParams | undefined;
+    let body: URLSearchParams | FormData | undefined;
     if (init.form) {
       body = new URLSearchParams(init.form);
       headers["Content-Type"] = "application/x-www-form-urlencoded";
+    } else if (init.multipart) {
+      body = init.multipart;
     }
     let response: Response;
     try {
-      response = await fetchImpl(url, { method: init.method, headers, body, redirect: "error", cache: "no-store", signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+      response = await fetchImpl(url, { method: init.method, headers, body, redirect: "error", cache: "no-store", signal: AbortSignal.timeout(init.timeoutMs ?? REQUEST_TIMEOUT_MS) });
     } catch (error) {
       const name = (error as { name?: string } | null)?.name;
       throw new MetaGraphError(name === "TimeoutError" || name === "AbortError" ? "TIMEOUT" : "TRANSPORT");
     }
-    const json = await readLimitedJson(response);
+    const headerTrace = response.headers.get("x-fb-trace-id");
+    const traceId = headerTrace && TRACE_ID.test(headerTrace) ? headerTrace : undefined;
+    let json: unknown;
+    try {
+      json = await readLimitedJson(response);
+    } catch (error) {
+      // Gövde okunurken kopan bağlantı/zaman aşımı da belirsizdir; ham hata dışarı verilmez.
+      if (error instanceof MetaGraphError) throw error;
+      const name = (error as { name?: string } | null)?.name;
+      throw new MetaGraphError(name === "TimeoutError" || name === "AbortError" ? "TIMEOUT" : "TRANSPORT", { httpStatus: response.status, traceId });
+    }
     const providerError = record(record(json).error);
     if (!response.ok || Object.keys(providerError).length > 0) {
+      const bodyTrace = typeof providerError.fbtrace_id === "string" && TRACE_ID.test(providerError.fbtrace_id) ? providerError.fbtrace_id : undefined;
       throw new MetaGraphError("PROVIDER", {
         httpStatus: response.status,
         code: typeof providerError.code === "number" ? providerError.code : undefined,
         subcode: typeof providerError.error_subcode === "number" ? providerError.error_subcode : undefined,
         type: typeof providerError.type === "string" ? providerError.type.slice(0, 64) : undefined,
+        isTransient: typeof providerError.is_transient === "boolean" ? providerError.is_transient : undefined,
+        traceId: bodyTrace ?? traceId,
       });
     }
     return record(json);
-  }
+  };
+}
+
+export function createMetaGraphClient(config: MetaConfig, fetchImpl: typeof fetch = fetch): MetaGraphClient {
+  const appSecretProof = (token: string) => createHmac("sha256", config.appSecret).update(token).digest("hex");
+  const request = createMetaRequester(config, fetchImpl);
 
   function parseUserToken(json: Record<string, unknown>): MetaUserToken {
     const accessToken = optionalString(json.access_token);
@@ -250,6 +280,106 @@ export function createMetaGraphClient(config: MetaConfig, fetchImpl: typeof fetc
       const id = metaId(json.id);
       if (!id) throw new MetaGraphError("INVALID_RESPONSE");
       return { id, username: optionalString(json.username)?.slice(0, 100) ?? null };
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// P6-03: yayınlama çağrıları (yalnızca Instagram tek JPEG ve Facebook Page metin/tek fotoğraf).
+// Bu istemci sonuç yorumlamaz; kimlik biçimi yanlış/eksikse INVALID_RESPONSE fırlatır ve çağıran taraf
+// yayın çağrısından sonra bunu belirsiz (UNKNOWN) sayar. Token yalnızca Authorization başlığındadır.
+
+const PUBLISH_TIMEOUT_MS = 20_000;
+const PHOTO_UPLOAD_TIMEOUT_MS = 45_000;
+const FACEBOOK_POST_ID = /^\d{1,32}_\d{1,32}$/;
+
+export type MetaContainerStatus = "IN_PROGRESS" | "FINISHED" | "ERROR" | "EXPIRED" | "PUBLISHED" | "UNRECOGNIZED";
+
+export interface MetaPublishingGraphClient {
+  getContentPublishingLimit(instagramAccountId: string, pageToken: string): Promise<{ usage: number; total: number } | null>;
+  createImageContainer(instagramAccountId: string, input: { imageUrl: string; caption: string }, pageToken: string): Promise<{ containerId: string }>;
+  getContainerStatus(containerId: string, pageToken: string): Promise<MetaContainerStatus>;
+  publishContainer(instagramAccountId: string, containerId: string, pageToken: string): Promise<{ mediaId: string }>;
+  createFeedPost(pageId: string, message: string, pageToken: string): Promise<{ postId: string }>;
+  createPagePhoto(pageId: string, input: { bytes: Uint8Array; mimeType: string; caption: string }, pageToken: string): Promise<{ photoId: string | null; postId: string | null }>;
+}
+
+export function createMetaPublishingClient(config: MetaConfig, fetchImpl: typeof fetch = fetch): MetaPublishingGraphClient {
+  const appSecretProof = (token: string) => createHmac("sha256", config.appSecret).update(token).digest("hex");
+  const request = createMetaRequester(config, fetchImpl);
+
+  return {
+    async getContentPublishingLimit(instagramAccountId, pageToken) {
+      const json = await request(`${assertMetaId(instagramAccountId)}/content_publishing_limit`, {
+        method: "GET",
+        query: { fields: "quota_usage,config", appsecret_proof: appSecretProof(pageToken) },
+        bearer: pageToken,
+      });
+      const first = record(Array.isArray(json.data) ? json.data[0] : null);
+      const usage = first.quota_usage;
+      const total = record(first.config).quota_total;
+      if (typeof usage !== "number" || typeof total !== "number") return null;
+      return { usage, total };
+    },
+
+    async createImageContainer(instagramAccountId, input, pageToken) {
+      const json = await request(`${assertMetaId(instagramAccountId)}/media`, {
+        method: "POST",
+        form: { image_url: input.imageUrl, caption: input.caption, appsecret_proof: appSecretProof(pageToken) },
+        bearer: pageToken,
+        timeoutMs: PUBLISH_TIMEOUT_MS,
+      });
+      const containerId = metaId(json.id);
+      if (!containerId) throw new MetaGraphError("INVALID_RESPONSE");
+      return { containerId };
+    },
+
+    async getContainerStatus(containerId, pageToken) {
+      const json = await request(assertMetaId(containerId), {
+        method: "GET",
+        query: { fields: "status_code", appsecret_proof: appSecretProof(pageToken) },
+        bearer: pageToken,
+      });
+      const status = optionalString(json.status_code);
+      return status && ["IN_PROGRESS", "FINISHED", "ERROR", "EXPIRED", "PUBLISHED"].includes(status) ? (status as MetaContainerStatus) : "UNRECOGNIZED";
+    },
+
+    async publishContainer(instagramAccountId, containerId, pageToken) {
+      const json = await request(`${assertMetaId(instagramAccountId)}/media_publish`, {
+        method: "POST",
+        form: { creation_id: assertMetaId(containerId), appsecret_proof: appSecretProof(pageToken) },
+        bearer: pageToken,
+        timeoutMs: PUBLISH_TIMEOUT_MS,
+      });
+      const mediaId = metaId(json.id);
+      if (!mediaId) throw new MetaGraphError("INVALID_RESPONSE");
+      return { mediaId };
+    },
+
+    async createFeedPost(pageId, message, pageToken) {
+      const json = await request(`${assertMetaId(pageId)}/feed`, {
+        method: "POST",
+        form: { message, published: "true", appsecret_proof: appSecretProof(pageToken) },
+        bearer: pageToken,
+        timeoutMs: PUBLISH_TIMEOUT_MS,
+      });
+      const postId = optionalString(json.id);
+      if (!postId || !FACEBOOK_POST_ID.test(postId)) throw new MetaGraphError("INVALID_RESPONSE");
+      return { postId };
+    },
+
+    async createPagePhoto(pageId, input, pageToken) {
+      const form = new FormData();
+      form.set("source", new Blob([Buffer.from(input.bytes)], { type: input.mimeType }), input.mimeType === "image/png" ? "photo.png" : "photo.jpg");
+      form.set("caption", input.caption);
+      form.set("published", "true");
+      form.set("appsecret_proof", appSecretProof(pageToken));
+      const json = await request(`${assertMetaId(pageId)}/photos`, { method: "POST", multipart: form, bearer: pageToken, timeoutMs: PHOTO_UPLOAD_TIMEOUT_MS });
+      const postIdRaw = optionalString(json.post_id);
+      const postId = postIdRaw && FACEBOOK_POST_ID.test(postIdRaw) ? postIdRaw : null;
+      const photoId = metaId(json.id);
+      if (!postId && !photoId) throw new MetaGraphError("INVALID_RESPONSE");
+      return { photoId, postId };
     },
   };
 }

@@ -44,11 +44,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               {meta.canManage && account.state === "CONNECTED" && <>
                 <form action={validateMetaConnectionAction}><input type="hidden" name="socialAccountId" value={account.id} /><PendingSubmitButton className="button small" idle="Doğrula" pending="Doğrulanıyor…" disabled={!meta.configured} /></form>
                 <form action={disconnectMetaAccountAction}><input type="hidden" name="socialAccountId" value={account.id} /><PendingSubmitButton className="button small" idle="Bağlantıyı kes" pending="Kesiliyor…" /></form>
+                {!account.publishPermission && meta.configured && <form action={startMetaConnectionAction}><input type="hidden" name="socialAccountId" value={account.id} /><input type="hidden" name="requestPublishing" value="1" /><PendingSubmitButton className="button small" idle="Yayın izni ver" pending="Yönlendiriliyor…" /></form>}
               </>}
               {meta.canManage && meta.configured && account.reconnectable && account.state !== "CONNECTED" && <form action={startMetaConnectionAction}><input type="hidden" name="socialAccountId" value={account.id} /><PendingSubmitButton className="button small" idle="Yeniden bağla" pending="Yönlendiriliyor…" /></form>}
             </div>
           ))}</div>
-          <p className="form-note">Bağlantı yalnızca hesap erişimini kurar; Ainetra bu aşamada hiçbir gönderi yayınlamaz.</p>
+          <p className="form-note">Bağlantı yalnızca hesap erişimini kurar. Yayın için hesap başına ayrıca Meta yayın izni gerekir; gönderiler yalnızca içerik sayfasındaki Yayınla ile, onaylı ve zamanı gelmiş planlar için gönderilir.</p>
         </section>
       </div>
     </>

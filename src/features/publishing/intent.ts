@@ -174,7 +174,7 @@ export async function invalidatePublishIntentsForVariant(tx: Prisma.TransactionC
   });
 }
 
-function evidenceRecord(evidence: PublishIntentEvidence, now: Date): Prisma.InputJsonValue {
+export function evidenceRecord(evidence: PublishIntentEvidence, now: Date): Prisma.InputJsonValue {
   const record: Record<string, string | boolean> = { kind: evidence.kind, recordedAt: now.toISOString() };
   if ("providerReference" in evidence) record.providerReference = evidence.providerReference;
   if ("publishedAt" in evidence) record.publishedAt = evidence.publishedAt.toISOString();

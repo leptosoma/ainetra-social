@@ -9,6 +9,8 @@ import type { AccountConnection, CredentialHandle } from "@/features/publishing/
 import {
   META_ELIGIBLE_PAGE_TASKS,
   META_OAUTH_ATTEMPT_TTL_MS,
+  META_PUBLISH_PAGE_TASKS,
+  META_PUBLISH_SCOPES,
   META_REQUIRED_SCOPES,
   META_SELECTION_TTL_MS,
   loadMetaConfig,
@@ -155,7 +157,7 @@ export async function purgeExpiredMetaAttempts(now = new Date()) {
 // ---------------------------------------------------------------------------------------------------------
 // Başlatma
 
-export async function startMetaConnection(ctx: MetaSessionContext, businessId: string, options: { reconnectSocialAccountId?: string | null } = {}, overrides: Partial<MetaDeps> = {}) {
+export async function startMetaConnection(ctx: MetaSessionContext, businessId: string, options: { reconnectSocialAccountId?: string | null; requestPublishing?: boolean } = {}, overrides: Partial<MetaDeps> = {}) {
   const deps = resolveDeps(overrides);
   await requireOwner(ctx.userId, businessId);
   if (!deps.config || !deps.graph || !deps.keyring) throw new DomainError(META_FAILURE_MESSAGES.NOT_CONFIGURED, "VALIDATION_ERROR");
@@ -163,11 +165,18 @@ export async function startMetaConnection(ctx: MetaSessionContext, businessId: s
   if (!session || session.userId !== ctx.userId || session.expiresAt <= deps.now()) throw new DomainError("Oturum geçersiz.", "UNAUTHORIZED");
 
   let reconnectSocialAccountId: string | null = null;
+  let publishScopes: readonly string[] = [];
+  if (options.requestPublishing && !options.reconnectSocialAccountId) throw new DomainError("Yayın izni yalnızca bağlı bir hesap için istenebilir.", "VALIDATION_ERROR");
   if (options.reconnectSocialAccountId) {
     const target = await prisma.socialAccount.findUnique({ where: { id: options.reconnectSocialAccountId }, include: { metaConnection: true } });
     if (!target || target.businessId !== businessId) throw new DomainError("Sosyal hesap bulunamadı.", "NOT_FOUND");
     if (!target.metaConnection) throw new DomainError("Bu hesap daha önce Meta üzerinden bağlanmamış.", "VALIDATION_ERROR");
     reconnectSocialAccountId = target.id;
+    // P6-03: yayın izni yalnızca sahibin açık isteğiyle ve yalnızca hedef platformun izniyle eklenir.
+    if (options.requestPublishing) {
+      if (target.platform !== "INSTAGRAM" && target.platform !== "FACEBOOK") throw new DomainError("Bu platform için yayınlama desteklenmiyor.", "VALIDATION_ERROR");
+      publishScopes = META_PUBLISH_SCOPES[target.platform];
+    }
   }
 
   const now = deps.now();
@@ -186,8 +195,8 @@ export async function startMetaConnection(ctx: MetaSessionContext, businessId: s
       expiresAt: new Date(now.getTime() + META_OAUTH_ATTEMPT_TTL_MS),
     },
   });
-  await audit(prisma, { businessId, attemptId: attempt.id, actorUserId: ctx.userId, action: "CONNECT_STARTED", result: reconnectSocialAccountId ? "RECONNECT" : "CONNECT", socialAccountId: reconnectSocialAccountId });
-  return { attemptId: attempt.id, authorizeUrl: deps.graph.buildAuthorizeUrl(state, META_REQUIRED_SCOPES, { rerequest: Boolean(reconnectSocialAccountId) }) };
+  await audit(prisma, { businessId, attemptId: attempt.id, actorUserId: ctx.userId, action: "CONNECT_STARTED", result: publishScopes.length ? "PUBLISH_AUTHORIZATION" : reconnectSocialAccountId ? "RECONNECT" : "CONNECT", socialAccountId: reconnectSocialAccountId });
+  return { attemptId: attempt.id, authorizeUrl: deps.graph.buildAuthorizeUrl(state, [...META_REQUIRED_SCOPES, ...publishScopes], { rerequest: Boolean(reconnectSocialAccountId) }) };
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -683,7 +692,14 @@ export type MetaAccountView = {
   instagramUsername: string | null;
   lastValidatedAt: Date | null;
   reconnectable: boolean;
+  /** P6-03: saklı kapsamlarda platformun yayın izni var mı (gönderimde yine de yeniden doğrulanır). */
+  publishPermission: boolean;
 };
+
+export function hasPublishPermission(platform: SocialPlatform, grantedScopes: readonly string[]) {
+  if (platform !== "INSTAGRAM" && platform !== "FACEBOOK") return false;
+  return META_PUBLISH_SCOPES[platform].every((scope) => grantedScopes.includes(scope));
+}
 
 /** Ayarlar ekranı görünümü: token, şifreli metin, sağlayıcı kimliği veya kapsam listesi dönmez. */
 export async function getMetaConnectionOverview(userId: string, businessId: string, overrides: Partial<Pick<MetaDeps, "config" | "keyring">> = {}) {
@@ -699,7 +715,7 @@ export async function getMetaConnectionOverview(userId: string, businessId: stri
   }
   const accounts = await prisma.socialAccount.findMany({
     where: { businessId },
-    include: { metaConnection: { select: { credentialRef: true, reauthRequiredAt: true, disconnectedAt: true, tokenExpiresAt: true, pageName: true, instagramUsername: true, lastValidatedAt: true } } },
+    include: { metaConnection: { select: { credentialRef: true, reauthRequiredAt: true, disconnectedAt: true, tokenExpiresAt: true, pageName: true, instagramUsername: true, lastValidatedAt: true, grantedScopes: true } } },
     orderBy: { createdAt: "asc" },
   });
   const lastAttempt = await prisma.metaOAuthAttempt.findFirst({ where: { businessId, userId }, orderBy: { createdAt: "desc" }, select: { status: true, failureCode: true } });
@@ -715,6 +731,7 @@ export async function getMetaConnectionOverview(userId: string, businessId: stri
       instagramUsername: account.metaConnection?.instagramUsername ?? null,
       lastValidatedAt: account.metaConnection?.lastValidatedAt ?? null,
       reconnectable: state !== "NOT_LINKED",
+      publishPermission: state === "CONNECTED" && hasPublishPermission(account.platform, account.metaConnection?.grantedScopes ?? []),
     };
   });
   return { configured, canManage: membership.role === "OWNER", accounts: views, lastFailure: lastAttempt?.status === "FAILED" ? lastAttempt.failureCode : null };
@@ -744,4 +761,69 @@ export async function resolveMetaAccessToken(connection: AccountConnection, over
   const stored = await prisma.metaConnection.findUnique({ where: { credentialRef: connection.credential.handleId } });
   if (!stored || stored.businessId !== connection.businessId || stored.socialAccountId !== connection.socialAccountId) throw new DomainError("Kimlik bilgisi bulunamadı.", "NOT_FOUND");
   return decryptConnectionToken(keyring, stored);
+}
+
+export type MetaPublishingCredentialCheck =
+  | { ok: true }
+  | { ok: false; reason: "REAUTH_REQUIRED" | "PUBLISH_PERMISSION_MISSING" | "PAGE_TASK_MISSING" | "NOT_CONFIGURED" | "PROVIDER_UNAVAILABLE" };
+
+/**
+ * P6-03: gönderimden hemen önce, yalnızca sunucuda çağrılır. SocialAccount.status'a güvenilmez: saklı Page
+ * token'ı çözülür ve Meta debug_token ile uygulama, tür, Page kimliği, temel ve platforma özgü yayın izni
+ * yeniden doğrulanır. Geçersiz/iptal/süresi dolmuş/eşleşmeyen token P6-02 gibi "yeniden yetki gerekli"ye
+ * geçer; eksik yayın izni bağlantıyı silmez, yalnızca gönderimi durdurur. Ağ belirsizliği hiçbir şeyi değiştirmez.
+ */
+export async function verifyMetaPublishingCredential(connection: AccountConnection, actorUserId: string | null, overrides: Partial<MetaDeps> = {}): Promise<MetaPublishingCredentialCheck> {
+  const deps = resolveDeps(overrides);
+  const now = deps.now();
+  if (!deps.config || !deps.graph || !deps.keyring) return { ok: false, reason: "NOT_CONFIGURED" };
+  const stored = await prisma.metaConnection.findUnique({ where: { credentialRef: connection.credential.handleId }, include: { socialAccount: true } });
+  if (
+    !stored ||
+    stored.businessId !== connection.businessId ||
+    stored.socialAccountId !== connection.socialAccountId ||
+    stored.platform !== connection.platform ||
+    stored.providerAccountId !== connection.externalAccountId ||
+    connectionState(stored.socialAccount.status, stored, now) !== "CONNECTED"
+  ) {
+    return { ok: false, reason: "REAUTH_REQUIRED" };
+  }
+  if (stored.platform === "INSTAGRAM" && stored.instagramAccountId !== stored.providerAccountId) return { ok: false, reason: "REAUTH_REQUIRED" };
+  let token: string;
+  try {
+    token = decryptConnectionToken(deps.keyring, stored);
+  } catch {
+    await markReauthRequired(stored.socialAccountId, stored.businessId, "CREDENTIAL_UNREADABLE", actorUserId, now);
+    return { ok: false, reason: "REAUTH_REQUIRED" };
+  }
+  let debug: MetaTokenDebug;
+  try {
+    debug = await deps.graph.debugToken(token);
+  } catch (error) {
+    if (error instanceof MetaGraphError && error.isInvalidToken) {
+      await markReauthRequired(stored.socialAccountId, stored.businessId, "TOKEN_REVOKED", actorUserId, now);
+      return { ok: false, reason: "REAUTH_REQUIRED" };
+    }
+    return { ok: false, reason: "PROVIDER_UNAVAILABLE" };
+  }
+  const expired = debug.expiresAt !== null && debug.expiresAt <= now;
+  const reason = !debug.isValid || expired ? "TOKEN_INVALID" : debug.appId !== deps.config.appId || debug.type !== "PAGE" || debug.profileId !== stored.metaPageId ? "TOKEN_MISMATCH" : missingScopes(debug.scopes).length ? "MISSING_PERMISSIONS" : null;
+  if (reason) {
+    await markReauthRequired(stored.socialAccountId, stored.businessId, reason, actorUserId, now);
+    return { ok: false, reason: "REAUTH_REQUIRED" };
+  }
+  await prisma.metaConnection.update({ where: { id: stored.id }, data: { lastValidatedAt: now, tokenExpiresAt: debug.expiresAt, dataAccessExpiresAt: debug.dataAccessExpiresAt, grantedScopes: debug.scopes.slice(0, 50) } });
+  if (!hasPublishPermission(stored.platform, debug.scopes)) return { ok: false, reason: "PUBLISH_PERMISSION_MISSING" };
+  if (!stored.pageTasks.some((task) => (META_PUBLISH_PAGE_TASKS as readonly string[]).includes(task))) return { ok: false, reason: "PAGE_TASK_MISSING" };
+  return { ok: true };
+}
+
+/**
+ * P6-03: yayın sırasında Meta token'ı açıkça reddederse (190) P6-02 ile aynı "yeniden yetki gerekli" yolu.
+ * Tutamaç eşleşmezse hiçbir şey yapılmaz.
+ */
+export async function markMetaCredentialRejected(connection: AccountConnection, reason: string, now = new Date()) {
+  const stored = await prisma.metaConnection.findUnique({ where: { credentialRef: connection.credential.handleId } });
+  if (!stored || stored.businessId !== connection.businessId || stored.socialAccountId !== connection.socialAccountId) return;
+  await markReauthRequired(stored.socialAccountId, stored.businessId, reason, null, now);
 }

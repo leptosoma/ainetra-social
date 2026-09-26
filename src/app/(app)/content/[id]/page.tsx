@@ -2,20 +2,27 @@ import Link from "next/link";
 import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
 import { approveVariantAction, exportVariantAction, scheduleVariantAction, updateVariantAction } from "@/actions/content";
+import { publishNowAction } from "@/actions/publishing";
+import { PendingSubmitButton } from "@/components/pending-submit-button";
+import { PUBLISH_NOW_MESSAGES, PUBLISH_STATUS_HINTS, PUBLISH_STATUS_LABELS, isPublishNowErrorCode, publishStatusLabelKey } from "@/features/publishing/labels";
 import { getCurrentUser } from "@/features/auth/session";
 import { deriveWorkflowLabel } from "@/features/content/service";
 import { prisma } from "@/lib/db";
 
-export default async function ContentDetailPage({ params }: { params: Promise<{ id: string }> }) {
+const PUBLISHABLE_PLATFORMS = new Set(["INSTAGRAM", "FACEBOOK"]);
+
+export default async function ContentDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ publishError?: string; publish?: string }> }) {
   const user = await getCurrentUser();
   if (!user) redirect("/sign-in");
   const { id } = await params;
+  const query = await searchParams;
+  const publishError = isPublishNowErrorCode(query.publishError) ? PUBLISH_NOW_MESSAGES[query.publishError] : null;
   const item = await prisma.contentItem.findFirst({
     where: { id, business: { memberships: { some: { userId: user.id } } } },
     include: {
       business: true,
       goal: true,
-      variants: { include: { approvals: { orderBy: { approvedAt: "desc" } }, scheduledPosts: { orderBy: { createdAt: "desc" } }, mediaAsset: true } },
+      variants: { include: { approvals: { orderBy: { approvedAt: "desc" } }, scheduledPosts: { orderBy: { createdAt: "desc" }, include: { socialAccount: true, publishIntents: { orderBy: { generation: "desc" }, take: 1 } } }, mediaAsset: true } },
     },
   });
   if (!item) notFound();
@@ -24,15 +31,23 @@ export default async function ContentDetailPage({ params }: { params: Promise<{ 
     prisma.socialAccount.findMany({ where: { businessId: item.businessId }, orderBy: { platform: "asc" } }),
   ]);
 
+  const now = new Date();
+
   return (
     <>
       <Link href="/content" className="back-link">← İçeriklere dön</Link>
+      {publishError && <div className="alert warning" role="alert">{publishError}</div>}
       <header className="detail-header"><div><span className="eyebrow dark">{item.contentType} · {item.goal?.type ?? "HEDEFSİZ"}</span><h1>{item.title}</h1><p>{item.topic}</p></div></header>
       <div className="variant-grid">
         {item.variants.map((variant) => {
           const status = deriveWorkflowLabel(variant);
           const currentApproval = variant.approvals.find((approval) => approval.approvedVersion === variant.version);
           const currentSchedule = variant.scheduledPosts.find((post) => post.status === "SCHEDULED" && post.contentVersion === variant.version);
+          const publishPost = variant.scheduledPosts.find((post) => post.contentVersion === variant.version && ["SCHEDULED", "PUBLISHED", "FAILED"].includes(post.status));
+          const publishIntent = publishPost?.publishIntents[0] ?? null;
+          const publishKey = publishStatusLabelKey(publishIntent, now);
+          const publishDue = Boolean(publishPost && publishPost.scheduledAt <= now);
+          const canPublish = Boolean(currentApproval && publishPost?.status === "SCHEDULED" && publishDue && PUBLISHABLE_PLATFORMS.has(publishPost.socialAccount.platform) && (publishKey === "READY" || publishKey === "RETRY_WAIT"));
           return (
             <article className="variant-card" key={variant.id}>
               <div className="variant-top"><div><span className="platform-pill">{variant.platform}</span><h2>Platform varyantı</h2></div><div><span className={`status ${status.toLowerCase()}`}>{status}</span><span className="version-pill">Sürüm {variant.version}</span></div></div>
@@ -62,6 +77,7 @@ export default async function ContentDetailPage({ params }: { params: Promise<{ 
                       <input name="scheduledAt" type="datetime-local" required />
                       <button className="button primary" type="submit" disabled={!currentApproval}>Planla</button>
                     </form>
+                    {publishPost && <div className="workflow-step"><span>3</span><div><strong>Yayın</strong><small>{publishPost.socialAccount.platform} · {publishPost.socialAccount.displayName} · <b>{PUBLISH_STATUS_LABELS[publishKey]}</b>{PUBLISH_STATUS_HINTS[publishKey] ? ` ${PUBLISH_STATUS_HINTS[publishKey]}` : ""}{publishKey === "READY" && !publishDue ? " Planlanan zaman gelince buradan yayınlayabilirsiniz; otomatik yayın henüz yok." : ""}</small></div>{canPublish && <form action={publishNowAction}><input type="hidden" name="scheduledPostId" value={publishPost.id} /><input type="hidden" name="contentId" value={item.id} /><input type="hidden" name="expectedVersion" value={variant.version} /><PendingSubmitButton className="button small" idle="Yayınla" pending="Yayınlanıyor…" /></form>}</div>}
                     <form action={exportVariantAction}><input type="hidden" name="variantId" value={variant.id} /><input type="hidden" name="contentId" value={item.id} /><button className="text-button" type="submit">Dışa aktarımı kaydet</button>{variant.exportedAt && <small className="inline-note"> Son dışa aktarım: v{variant.exportedVersion}</small>}</form>
                   </div>
                 </div>

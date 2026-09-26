@@ -1039,6 +1039,11 @@ model PublishAttempt {
   // Yalnızca redakte edilmiş teşhis bilgisi; token/secret asla yazılmaz.
   diagnostics       Json?
   completedAt       DateTime?
+  // P6-03: denemeyi yürüten adaptör ve Instagram konteyner kimliği (nihai gönderi kimliği değildir;
+  // nihai Meta gönderi/medya kimliği providerReference alanındadır).
+  adapterKey          String?
+  adapterVersion      Int?
+  providerContainerId String?
   scheduledPost     ScheduledPost        @relation(fields: [scheduledPostId], references: [id], onDelete: Cascade)
   publishIntent     PublishIntent?       @relation(fields: [publishIntentId], references: [id], onDelete: Cascade)
 
@@ -1073,6 +1078,8 @@ model PublishIntent {
   providerReference String?
   providerEvidence  Json?
   publishedAt       DateTime?
+  // P6-03: IN_FLIGHT kiralamasını kazanan tek deneme. Sonuç yalnızca bu denemeyle karşılaştır-ve-yaz ile kaydedilir.
+  currentAttemptId  String?            @unique
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   business          Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)

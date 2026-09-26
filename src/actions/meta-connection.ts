@@ -40,9 +40,10 @@ export async function startMetaConnectionAction(formData: FormData) {
   const business = await getFirstBusinessForUser(ctx.userId);
   if (!business) redirect("/dashboard");
   const reconnectSocialAccountId = String(formData.get("socialAccountId") ?? "") || null;
+  const requestPublishing = String(formData.get("requestPublishing") ?? "") === "1";
   let authorizeUrl: string;
   try {
-    authorizeUrl = (await startMetaConnection(ctx, business.id, { reconnectSocialAccountId })).authorizeUrl;
+    authorizeUrl = (await startMetaConnection(ctx, business.id, { reconnectSocialAccountId, requestPublishing })).authorizeUrl;
   } catch (error) {
     settingsWith("metaError", metaFailureCodeForError(error));
   }

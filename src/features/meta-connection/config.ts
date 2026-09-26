@@ -20,6 +20,20 @@ export const META_REQUIRED_SCOPES = ["pages_show_list", "instagram_basic", "page
  * yapabilmesini ister. P6-02 aynı kümeyi Facebook Page seçimi için de asgari uygunluk olarak kullanır;
  * yayınlama için gereken görevler P6-03 uç nokta incelemesinde doğrulanır.
  */
+/**
+ * P6-03 yayın izinleri (görev paketi, 2026-09-26). Bağlantı kapsamlarından çıkarılmaz; her platform için
+ * açık bir yeniden yetkilendirme ile istenir ve gönderimden hemen önce debug_token ile yeniden doğrulanır.
+ * Instagram (Facebook Login): instagram_content_publish (+ temel instagram_basic, pages_read_engagement).
+ * Facebook Page metin/fotoğraf: pages_manage_posts (+ temel pages_read_engagement, pages_show_list).
+ */
+export const META_PUBLISH_SCOPES = {
+  INSTAGRAM: ["instagram_content_publish"],
+  FACEBOOK: ["pages_manage_posts"],
+} as const satisfies Record<"INSTAGRAM" | "FACEBOOK", readonly string[]>;
+
+/** Page üzerinde içerik oluşturma görevi (CREATE_CONTENT; MANAGE bunu kapsar) yayın için gereklidir. */
+export const META_PUBLISH_PAGE_TASKS = ["MANAGE", "CREATE_CONTENT"] as const;
+
 export const META_ELIGIBLE_PAGE_TASKS = ["MANAGE", "CREATE_CONTENT", "MODERATE", "ADVERTISE"] as const;
 
 export const META_OAUTH_ATTEMPT_TTL_MS = 10 * 60 * 1000;
