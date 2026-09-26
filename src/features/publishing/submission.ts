@@ -20,10 +20,14 @@ import type { AccountConnection, PublishOutcome, PublishingAdapter, RedactedDiag
 import { checkPublishIntentDispatchable, evidenceRecord, requestPublishIntent } from "./intent";
 import {
   DISPATCHABLE_INTENT_STATES,
+  MAX_PUBLISH_ATTEMPTS,
+  PUBLISH_CALL_GUARD_MARKER,
   attemptStatusForOutcome,
-  evidenceForElapsedTime,
+  evidenceForExpiredLease,
   evidenceFromSubmitOutcome,
   planIntentTransition,
+  planRetry,
+  type PublishIntentEvidence,
   type PublishIntentState,
 } from "./intent-state";
 import { PUBLISH_NOW_MESSAGES, type PublishNowErrorCode } from "./labels";
@@ -32,12 +36,14 @@ import { createMetaPublishingAdapter } from "./meta-adapter";
 import type { PublishSnapshotV1 } from "./snapshot";
 
 // P6-03: onaylı, değişmez PublishIntent için tek, açık "şimdi yayınla" komutu (yalnızca dueAt <= şimdi).
-// Zamanlanmış worker, otomatik yeniden deneme veya mutabakat yoktur (P6-04/P6-05).
+// P6-04: aynı gönderim çekirdeği (dispatchPublishIntent) oturumsuz worker tarafından da kullanılır; ikinci bir
+// yayın yolu yoktur. Mutabakat (UNKNOWN çözümü) P6-05'tir.
 //
 // Sıra: yetki → intent (oluştur/yeniden kullan) → zaman/onay/sürüm/snapshot → hedef/medya soyu → gerçek
 // Meta kimlik bilgisi ve yayın izni (ağ) → kısa Serializable CAS ile IN_FLIGHT + tek numaralı deneme →
 // dış çağrılardan önce sahiplik/kaynak yeniden denetimi → prepareMedia → (IG konteyner kimliği kalıcı) →
-// sahiplik yeniden denetimi → submit → sonuç ve kanıt, kiralamayı tutan denemeye karşılaştır-ve-yaz ile.
+// sahiplik yeniden denetimi → submit → (gerçek yayın çağrısından hemen önce kalıcı çağrı-başladı işareti) →
+// sonuç ve kanıt, kiralamayı tutan denemeye karşılaştır-ve-yaz ile.
 // Hiçbir veritabanı işlemi Meta ağ çağrısı boyunca açık kalmaz.
 
 const FIRST_GENERATION = 1;
@@ -48,7 +54,8 @@ export type PublishNowDeps = {
   adapter: PublishingAdapter | null;
   mediaDeliveryConfigured: boolean;
   resolveConnection: (businessId: string, socialAccountId: string) => Promise<AccountConnection | null>;
-  verifyCredential: (connection: AccountConnection, actorUserId: string) => Promise<MetaPublishingCredentialCheck>;
+  /** Worker yolunda denetim aktörü yoktur (null); kullanıcı kimliği uydurulmaz. */
+  verifyCredential: (connection: AccountConnection, actorUserId: string | null) => Promise<MetaPublishingCredentialCheck>;
   markCredentialRejected: (connection: AccountConnection, reason: string, now: Date) => Promise<void>;
   now: () => Date;
   leaseMs: number;
@@ -131,21 +138,74 @@ function resultOf(intent: { id: string; state: PublishIntentState; currentAttemp
   return { intentId: intent.id, state: intent.state, attemptId: intent.currentAttemptId, dispatched };
 }
 
+type IntentRow = Awaited<ReturnType<typeof prisma.publishIntent.findUniqueOrThrow>>;
+
 /**
- * Süresi dolmuş IN_FLIGHT kiralaması UNKNOWN olur (gönderim sağlayıcıya ulaşmış olabilir) ve asla yeniden
- * gönderilmez. Deneme satırına dokunulmaz: süreç hâlâ yaşıyorsa gerçek sonucu denemeye yazabilir; intent
- * ise mutabakata (P6-05) kalır.
+ * Tek kanıt → veri çevirisi. RETRY_WAIT hedefinde deterministik bekleme yazılır; bütçe dolmuşsa aynı işlemde
+ * mevcut RETRY_BUDGET_EXHAUSTED kanıtıyla FAILED'a geçilir (denemenin özgün redakte reddi denemede kalır).
  */
-async function recoverExpiredLease(intentId: string, now: Date) {
-  const intent = await prisma.publishIntent.findUniqueOrThrow({ where: { id: intentId } });
-  const evidence = evidenceForElapsedTime(intent, now);
-  if (!evidence) return intent;
-  planIntentTransition(intent, evidence);
-  await prisma.publishIntent.updateMany({
-    where: { id: intent.id, state: "IN_FLIGHT", leaseExpiresAt: { lte: now } },
-    data: { state: "UNKNOWN", stateChangedAt: now, leaseExpiresAt: null, providerEvidence: evidenceRecord(evidence, now) },
-  });
-  return prisma.publishIntent.findUniqueOrThrow({ where: { id: intentId } });
+function transitionData(intent: IntentRow, evidence: PublishIntentEvidence, attemptNumber: number | null, now: Date) {
+  const planned = planIntentTransition(intent, evidence);
+  let to = planned.to;
+  let recorded = evidence;
+  const data: Prisma.PublishIntentUpdateManyMutationInput = { stateChangedAt: now, leaseExpiresAt: null, nextAttemptAt: null };
+  if (evidence.kind === "PROVIDER_CONFIRMED") {
+    data.providerReference = evidence.providerReference;
+    data.publishedAt = evidence.publishedAt;
+  }
+  if (to === "RETRY_WAIT") {
+    const retry = planRetry(attemptNumber ?? MAX_PUBLISH_ATTEMPTS, now);
+    if (retry.kind === "RETRY") {
+      data.nextAttemptAt = retry.nextAttemptAt;
+    } else {
+      recorded = { kind: "RETRY_BUDGET_EXHAUSTED" };
+      to = planIntentTransition({ state: "RETRY_WAIT", invalidatedAt: intent.invalidatedAt }, recorded).to;
+    }
+  }
+  data.state = to;
+  data.providerEvidence = evidenceRecord(recorded, now);
+  return { to, data };
+}
+
+async function syncScheduledPost(tx: Prisma.TransactionClient, scheduledPostId: string, to: PublishIntentState) {
+  if (to === "PUBLISHED") {
+    await tx.scheduledPost.updateMany({ where: { id: scheduledPostId, status: { in: ["SCHEDULED", "INVALIDATED"] } }, data: { status: "PUBLISHED" } });
+  } else if (to === "FAILED") {
+    await tx.scheduledPost.updateMany({ where: { id: scheduledPostId, status: "SCHEDULED" }, data: { status: "FAILED" } });
+  }
+}
+
+/**
+ * P6-04: süresi dolmuş IN_FLIGHT, dayanıklı deneme kanıtıyla değerlendirilir; kiralamanın dolması tek başına
+ * "yayınlanmadı" kanıtı değildir. Korumalı denemede çağrı-başladı işareti yoksa, işaret boşken denemeyi aynı
+ * işlemde kapatarak (eski işçi artık işaret yazamaz, yani Meta'yı çağıramaz) güvenli RETRY_WAIT'e geçilir.
+ * Aksi halde (işaretli, işaretsiz eski deneme, deneme yok) UNKNOWN olur ve asla yeniden gönderilmez; deneme
+ * satırına dokunulmaz, geç gelen gerçek sonuç denemeye yazılabilir, intent mutabakata (P6-05) kalır.
+ */
+export async function recoverExpiredLease(intentId: string, now: Date) {
+  return withConflictRetry(() =>
+    prisma.$transaction(async (tx) => {
+      const intent = await tx.publishIntent.findUniqueOrThrow({ where: { id: intentId } });
+      const attempt = intent.currentAttemptId ? await tx.publishAttempt.findUnique({ where: { id: intent.currentAttemptId } }) : null;
+      const evidence = evidenceForExpiredLease(intent, attempt && attempt.publishIntentId === intent.id ? attempt : null, now);
+      if (!evidence) return intent;
+      if (evidence.kind === "LEASE_EXPIRED_BEFORE_PUBLISH_CALL") {
+        const fenced = await tx.publishAttempt.updateMany({
+          where: { id: attempt!.id, status: attempt!.status, publishCallStartedAt: null },
+          data:
+            attempt!.status === "PENDING"
+              ? { status: "FAILED", outcome: "RETRYABLE_REJECTION", errorCode: "LEASE_EXPIRED_BEFORE_PUBLISH", diagnostics: { stage: "LEASE_EXPIRED", publishCallMade: false }, completedAt: now }
+              : { outcome: "RETRYABLE_REJECTION" },
+        });
+        if (fenced.count !== 1) throw new DomainError("Yayın denemesi başka bir işlem tarafından değiştirildi.", "CONFLICT");
+      }
+      const { to, data } = transitionData(intent, evidence, attempt?.attemptNumber ?? null, now);
+      const updated = await tx.publishIntent.updateMany({ where: { id: intent.id, state: "IN_FLIGHT", currentAttemptId: intent.currentAttemptId, leaseExpiresAt: { lte: now } }, data });
+      if (updated.count !== 1) throw new DomainError("Yayın niyeti başka bir işlem tarafından değiştirildi.", "CONFLICT");
+      await syncScheduledPost(tx, intent.scheduledPostId, to);
+      return tx.publishIntent.findUniqueOrThrow({ where: { id: intentId } });
+    }, { isolationLevel: "Serializable" }),
+  );
 }
 
 function snapshotMatchesIntent(snapshot: PublishSnapshotV1, intent: { businessId: string; socialAccountId: string; scheduledPostId: string; platform: string; approvalId: string; sourceVariantId: string; sourceVersion: number }) {
@@ -174,19 +234,39 @@ async function mediaLineageIntact(snapshot: PublishSnapshotV1) {
  * Tek, kısa Serializable işlem: dağıtılabilirliği yeniden doğrular, PENDING/RETRY_WAIT'i IN_FLIGHT olarak
  * kiralar ve kiralamaya bağlı tek numaralı PublishAttempt oluşturur. Kaybeden eşzamanlı çağıran null alır.
  */
-async function claimIntent(intentId: string, adapter: PublishingAdapter, now: Date, leaseMs: number) {
+/**
+ * P6-04: worker'ın RETRY_WAIT'i otomatik yeniden deneyebilmesi için: kalıcı sonraki deneme zamanı gelmiş, son
+ * deneme kesin güvenli (yayın öncesi / sağlayıcının açık reddi) ve bütçe kalmış olmalı. Boş nextAttemptAt
+ * (P6-04 öncesi satırlar) otomatik denenmez.
+ */
+async function safeRetryDue(db: Prisma.TransactionClient, intent: IntentRow, now: Date) {
+  if (intent.state !== "RETRY_WAIT" || !intent.nextAttemptAt || intent.nextAttemptAt > now || !intent.currentAttemptId) return false;
+  const attempt = await db.publishAttempt.findUnique({ where: { id: intent.currentAttemptId } });
+  if (!attempt || attempt.publishIntentId !== intent.id || attempt.status !== "FAILED") return false;
+  const safe = attempt.outcome === "RETRYABLE_REJECTION" || (attempt.errorCode === "CLAIM_LOST_BEFORE_PUBLISH" && !attempt.publishCallStartedAt);
+  if (!safe) return false;
+  const used = await db.publishAttempt.count({ where: { publishIntentId: intent.id } });
+  return used < MAX_PUBLISH_ATTEMPTS;
+}
+
+export type DispatchMode = "USER" | "WORKER";
+
+async function claimIntent(intentId: string, adapter: PublishingAdapter, now: Date, leaseMs: number, mode: DispatchMode) {
   try {
-    return await prisma.$transaction(async (tx) => {
+    // Serializable yanlış-pozitif iptalleri yeniden denenir; yeniden okuma kaybedeni kesin olarak null'a çevirir.
+    return await withConflictRetry(() => prisma.$transaction(async (tx) => {
       const fresh = await tx.publishIntent.findUnique({ where: { id: intentId }, include: { scheduledPost: true, sourceVariant: true } });
       if (!fresh || !DISPATCHABLE_INTENT_STATES.has(fresh.state) || fresh.invalidatedAt || fresh.dueAt > now) return null;
       if (fresh.scheduledPost.status !== "SCHEDULED" || fresh.sourceVariant.version !== fresh.sourceVersion || fresh.scheduledPost.contentVersion !== fresh.sourceVersion) return null;
       const approval = await tx.approval.findUnique({ where: { contentVariantId_approvedVersion: { contentVariantId: fresh.sourceVariantId, approvedVersion: fresh.sourceVersion } } });
       if (!approval || approval.id !== fresh.approvalId) return null;
+      if (mode === "WORKER" && fresh.state === "RETRY_WAIT" && !(await safeRetryDue(tx, fresh, now))) return null;
 
       const leaseExpiresAt = new Date(now.getTime() + leaseMs);
       const evidence = { kind: "LEASE_ACQUIRED" as const, leaseExpiresAt };
       planIntentTransition(fresh, evidence);
       const last = await tx.publishAttempt.aggregate({ where: { publishIntentId: fresh.id }, _max: { attemptNumber: true } });
+      if ((last._max.attemptNumber ?? 0) >= MAX_PUBLISH_ATTEMPTS) return null;
       const attempt = await tx.publishAttempt.create({
         data: {
           scheduledPostId: fresh.scheduledPostId,
@@ -196,15 +276,17 @@ async function claimIntent(intentId: string, adapter: PublishingAdapter, now: Da
           attemptedAt: now,
           adapterKey: adapter.adapterKey,
           adapterVersion: adapter.adapterVersion,
+          // Korumalı protokol işareti: bu denemede yayın çağrısı yalnızca beginPublishCall başarılıysa yapılır.
+          diagnostics: { publishGuard: PUBLISH_CALL_GUARD_MARKER },
         },
       });
       const updated = await tx.publishIntent.updateMany({
         where: { id: fresh.id, state: fresh.state, invalidatedAt: null },
-        data: { state: "IN_FLIGHT", stateChangedAt: now, leaseExpiresAt, currentAttemptId: attempt.id, providerEvidence: evidenceRecord(evidence, now) },
+        data: { state: "IN_FLIGHT", stateChangedAt: now, leaseExpiresAt, nextAttemptAt: null, currentAttemptId: attempt.id, providerEvidence: evidenceRecord(evidence, now) },
       });
       if (updated.count !== 1) throw new DomainError("Yayın niyeti başka bir işlem tarafından değiştirildi.", "CONFLICT");
       return { attemptId: attempt.id, leaseExpiresAt };
-    }, { isolationLevel: "Serializable" });
+    }, { isolationLevel: "Serializable" }));
   } catch (error) {
     if (isRetryableConflict(error) || (error instanceof DomainError && error.code === "CONFLICT")) return null;
     throw error;
@@ -216,7 +298,7 @@ async function claimIntent(intentId: string, adapter: PublishingAdapter, now: Da
  * İsteğe bağlı olarak IG konteyner kimliği yayın çağrısından ÖNCE aynı karşılaştır-ve-yaz ile kalıcılaşır.
  */
 async function confirmClaim(intentId: string, attemptId: string, now: Date, containerId?: string) {
-  return prisma.$transaction(async (tx) => {
+  return withConflictRetry(() => prisma.$transaction(async (tx) => {
     const intent = await tx.publishIntent.findUnique({ where: { id: intentId }, include: { scheduledPost: true, sourceVariant: true } });
     if (!intent || intent.state !== "IN_FLIGHT" || intent.currentAttemptId !== attemptId || intent.invalidatedAt) return false;
     if (!intent.leaseExpiresAt || intent.leaseExpiresAt <= now) return false;
@@ -226,7 +308,28 @@ async function confirmClaim(intentId: string, attemptId: string, now: Date, cont
       if (saved.count !== 1) return false;
     }
     return true;
-  }, { isolationLevel: "Serializable" });
+  }, { isolationLevel: "Serializable" }));
+}
+
+/**
+ * P6-04: gerçek yayın çağrısından hemen önce, aynı canlı kiralama/denemeye karşı kısa Serializable CAS ile
+ * `publishCallStartedAt` yazılır. Yazılamazsa (kiralama geri alındı/doldu, kaynak değişti, çakışma) false döner
+ * ve çağrı yapılmaz. Eşzamanlı kurtarma aynı deneme satırını işaret boşken kapattığından ikisinden yalnızca
+ * biri kazanabilir: ya çağrı işaretlidir (sonuç belirsiz sayılır) ya da eski işçi çağıramaz.
+ */
+async function beginPublishCall(intentId: string, attemptId: string, now: Date) {
+  try {
+    return await withConflictRetry(() => prisma.$transaction(async (tx) => {
+      const intent = await tx.publishIntent.findUnique({ where: { id: intentId }, include: { scheduledPost: true, sourceVariant: true } });
+      if (!intent || intent.state !== "IN_FLIGHT" || intent.currentAttemptId !== attemptId || intent.invalidatedAt) return false;
+      if (!intent.leaseExpiresAt || intent.leaseExpiresAt <= now) return false;
+      if (intent.scheduledPost.status !== "SCHEDULED" || intent.sourceVariant.version !== intent.sourceVersion) return false;
+      const marked = await tx.publishAttempt.updateMany({ where: { id: attemptId, publishIntentId: intentId, status: "PENDING", publishCallStartedAt: null }, data: { publishCallStartedAt: now } });
+      return marked.count === 1;
+    }, { isolationLevel: "Serializable" }));
+  } catch {
+    return false;
+  }
 }
 
 function sanitizedDiagnostics(diagnostics: RedactedDiagnostics | undefined, extra: Record<string, string | number | boolean> = {}): Prisma.InputJsonValue {
@@ -270,20 +373,11 @@ async function finalizeAttempt(intentId: string, attemptId: string, outcome: Pub
       const intent = await tx.publishIntent.findUniqueOrThrow({ where: { id: intentId } });
       if (recorded.count !== 1 || intent.state !== "IN_FLIGHT" || intent.currentAttemptId !== attemptId) return intent;
 
-      const evidence = evidenceFromSubmitOutcome(outcome);
-      const planned = planIntentTransition(intent, evidence);
-      const data: Prisma.PublishIntentUpdateManyMutationInput = { state: planned.to, stateChangedAt: now, leaseExpiresAt: null, providerEvidence: evidenceRecord(evidence, now) };
-      if (evidence.kind === "PROVIDER_CONFIRMED") {
-        data.providerReference = evidence.providerReference;
-        data.publishedAt = evidence.publishedAt;
-      }
+      const attempt = await tx.publishAttempt.findUniqueOrThrow({ where: { id: attemptId } });
+      const { to, data } = transitionData(intent, evidenceFromSubmitOutcome(outcome), attempt.attemptNumber, now);
       const updated = await tx.publishIntent.updateMany({ where: { id: intentId, state: "IN_FLIGHT", currentAttemptId: attemptId }, data });
       if (updated.count !== 1) throw new DomainError("Yayın niyeti başka bir işlem tarafından değiştirildi.", "CONFLICT");
-      if (planned.to === "PUBLISHED") {
-        await tx.scheduledPost.updateMany({ where: { id: intent.scheduledPostId, status: { in: ["SCHEDULED", "INVALIDATED"] } }, data: { status: "PUBLISHED" } });
-      } else if (planned.to === "FAILED") {
-        await tx.scheduledPost.updateMany({ where: { id: intent.scheduledPostId, status: "SCHEDULED" }, data: { status: "FAILED" } });
-      }
+      await syncScheduledPost(tx, intent.scheduledPostId, to);
       return tx.publishIntent.findUniqueOrThrow({ where: { id: intentId } });
     }, { isolationLevel: "Serializable" }),
   );
@@ -322,8 +416,27 @@ export async function publishScheduledPostNow(userId: string, scheduledPostId: s
       fail("NOT_PUBLISHABLE");
     }
   }
+  return dispatchPublishIntent(intent, { actorUserId: userId, mode: "USER" }, deps);
+}
+
+/**
+ * P6-04: oturumsuz worker girişi (güvenilir sunucu süreci; tarayıcıdan erişilemez). Mevcut intent'i yalnızca
+ * saklı snapshot'tan, kullanıcı yoluyla aynı çekirdek, CAS talebi ve kanıt yazımıyla gönderir. Süresi dolmuş
+ * IN_FLIGHT kanıta göre kurtarılır; UNKNOWN/PUBLISHED/FAILED/CANCELLED/INVALIDATED asla gönderilmez.
+ */
+export async function dispatchPublishIntentForWorker(intentId: string, overrides: Partial<PublishNowDeps> = {}): Promise<PublishNowResult> {
+  const deps = resolveDeps(overrides);
+  const intent = await prisma.publishIntent.findUnique({ where: { id: intentId } });
+  if (!intent) throw new DomainError("Yayın niyeti bulunamadı.", "NOT_FOUND");
+  if (intent.state === "IN_FLIGHT") return resultOf(await recoverExpiredLease(intent.id, deps.now()));
+  return dispatchPublishIntent(intent, { actorUserId: null, mode: "WORKER" }, deps);
+}
+
+/** Kullanıcı ve worker yollarının paylaştığı tek gönderim çekirdeği. */
+async function dispatchPublishIntent(intent: IntentRow, context: { actorUserId: string | null; mode: DispatchMode }, deps: PublishNowDeps): Promise<PublishNowResult> {
   if (!DISPATCHABLE_INTENT_STATES.has(intent.state)) return resultOf(intent);
-  if (intent.dueAt > now) fail("NOT_DUE");
+  if (intent.dueAt > deps.now()) fail("NOT_DUE");
+  if (context.mode === "WORKER" && intent.state === "RETRY_WAIT" && !(await safeRetryDue(prisma, intent, deps.now()))) return resultOf(intent);
 
   const readiness = await checkPublishIntentDispatchable(intent.id);
   if (!readiness.dispatchable) fail("NOT_PUBLISHABLE");
@@ -347,7 +460,7 @@ export async function publishScheduledPostNow(userId: string, scheduledPostId: s
   ) {
     fail("ACCOUNT_NOT_CONNECTED");
   }
-  const check = await deps.verifyCredential(connection, userId);
+  const check = await deps.verifyCredential(connection, context.actorUserId);
   if (!check.ok) {
     if (check.reason === "REAUTH_REQUIRED") fail("ACCOUNT_NOT_CONNECTED");
     if (check.reason === "PUBLISH_PERMISSION_MISSING") fail("PUBLISH_PERMISSION_MISSING");
@@ -356,7 +469,7 @@ export async function publishScheduledPostNow(userId: string, scheduledPostId: s
     fail("PROVIDER_UNAVAILABLE", "PROVIDER_FAILED");
   }
 
-  const claim = await claimIntent(intent.id, adapter, deps.now(), deps.leaseMs);
+  const claim = await claimIntent(intent.id, adapter, deps.now(), deps.leaseMs, context.mode);
   if (!claim) return resultOf(await prisma.publishIntent.findUniqueOrThrow({ where: { id: intent.id } }));
   const attemptId = claim.attemptId;
 
@@ -386,7 +499,16 @@ export async function publishScheduledPostNow(userId: string, scheduledPostId: s
 
   let outcome: PublishOutcome;
   try {
-    outcome = await adapter.submit({ intentId: intent.id, snapshot, snapshotHash: intent.snapshotHash, idempotencyKey: intent.idempotencyKey, target: connection, preparedMedia: prepared.media, attemptId });
+    outcome = await adapter.submit({
+      intentId: intent.id,
+      snapshot,
+      snapshotHash: intent.snapshotHash,
+      idempotencyKey: intent.idempotencyKey,
+      target: connection,
+      preparedMedia: prepared.media,
+      attemptId,
+      beforePublishCall: () => beginPublishCall(intent.id, attemptId, deps.now()),
+    });
   } catch {
     // Yayın çağrısı gönderilmiş olabilir: belirsiz.
     outcome = { kind: "UNKNOWN", reason: "PROVIDER_AMBIGUOUS", providerReference: containerId, diagnostics: { code: "INTERNAL_ERROR" } };

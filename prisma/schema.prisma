@@ -1044,6 +1044,10 @@ model PublishAttempt {
   adapterKey          String?
   adapterVersion      Int?
   providerContainerId String?
+  // P6-04: ilk gerçek yayın çağrısından (FB /feed, /photos; IG /media_publish) hemen ÖNCE, aynı canlı
+  // kiralamaya karşı karşılaştır-ve-yaz ile yazılır. Boşsa ve deneme korumalı protokolle oluşturulduysa
+  // yayın çağrısı başlamamıştır; doluysa sonuç belirsiz sayılır ve otomatik yeniden gönderilmez.
+  publishCallStartedAt DateTime?
   scheduledPost     ScheduledPost        @relation(fields: [scheduledPostId], references: [id], onDelete: Cascade)
   publishIntent     PublishIntent?       @relation(fields: [publishIntentId], references: [id], onDelete: Cascade)
 
@@ -1080,6 +1084,9 @@ model PublishIntent {
   publishedAt       DateTime?
   // P6-03: IN_FLIGHT kiralamasını kazanan tek deneme. Sonuç yalnızca bu denemeyle karşılaştır-ve-yaz ile kaydedilir.
   currentAttemptId  String?            @unique
+  // P6-04: RETRY_WAIT için bir sonraki otomatik deneme zamanı (veritabanı saatiyle). Boşsa worker otomatik
+  // yeniden denemez; deneme sayısı numaralı PublishAttempt satırlarından türetilir.
+  nextAttemptAt     DateTime?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
   business          Business           @relation(fields: [businessId], references: [id], onDelete: Cascade)
@@ -1091,6 +1098,8 @@ model PublishIntent {
 
   @@unique([scheduledPostId, generation])
   @@index([state, dueAt])
+  @@index([state, nextAttemptAt])
+  @@index([state, leaseExpiresAt])
   @@index([businessId, createdAt])
   @@index([socialAccountId])
   @@index([sourceVariantId])

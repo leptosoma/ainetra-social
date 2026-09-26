@@ -2,7 +2,7 @@
 
 ## Active phase
 
-Phase 6 — Publishing IN PROGRESS. P6-01 Publishing Domain Foundation, P6-02 Meta Account Connection and P6-03 Native Meta Submission are DONE; Phase 6 is not complete. Phase 5.5 is COMPLETE.
+Phase 6 — Publishing IN PROGRESS. P6-01 Publishing Domain Foundation, P6-02 Meta Account Connection, P6-03 Native Meta Submission and P6-04 PostgreSQL Scheduled Worker are DONE; Phase 6 is not complete. Phase 5.5 is COMPLETE.
 
 ## Done
 
@@ -26,10 +26,11 @@ Phase 6 — Publishing IN PROGRESS. P6-01 Publishing Domain Foundation, P6-02 Me
 - P6-01 Publishing Domain Foundation. DONE.
 - P6-02 Meta Account Connection. DONE.
 - P6-03 Native Meta Submission. DONE (deterministic Meta mocks only; live Meta publishing not validated).
+- P6-04 PostgreSQL Scheduled Worker. DONE (separate `npm run worker:publishing` process; deterministic Meta mocks only; live Meta publishing not validated).
 
 ## Ready
 
-- P6-04 PostgreSQL Scheduled Worker. READY; packet: `claude-tasks/P6-04-postgres-scheduled-worker.md`. Implementation not started; explicit go-ahead still required.
+- None. Next: P6-05 Cancel / Reschedule / Reconciliation (packet and explicit go-ahead required).
 
 ## Backlog
 
@@ -46,4 +47,5 @@ Phase 6 — Publishing IN PROGRESS. P6-01 Publishing Domain Foundation, P6-02 Me
 - P6-01 historical follow-ups: P6-03 now creates intents on an explicit due-now action, validates real Meta credentials and uses a native adapter with one CAS lease/attempt path. Automatic scheduled dispatch and bounded retry remain P6-04; UNKNOWN reconciliation remains P6-05. Local P6-01 validation ran on PostgreSQL 16 because PostgreSQL 17/Docker were unavailable in that environment.
 - P6-02 follow-ups: live Meta validation has not been performed (no Meta app credentials in the build environment); OAuth, discovery, selection, reconnect and disconnect were verified with a deterministic fake Graph client and a harness-only fetch mock. Before onboarding non-role customers, confirm Live mode, Advanced Access/App Review for `pages_show_list`, `instagram_basic`, `pages_read_engagement`, Business Verification if Meta requires it, the redirect domain, privacy policy and data-deletion callback, and run a provider test with a non-role account. Business Manager-granted Page roles may additionally need `ads_read`/`ads_management`; these are not requested and such users currently get an honest validation failure. Meta deauthorization/data-deletion webhooks are not implemented, so provider-side revocation is detected only by explicit validation; P6-03 revalidates it at dispatch. Disconnect removes the local credential only; provider-side revocation is not requested because app-level deauthorization would affect the Meta user's other connections. `requestPublishIntent` checks `SocialAccount.status` during creation; P6-03 separately resolves and revalidates the Meta credential before dispatch. Pending OAuth attempts expire after 10 minutes and are purged on the next connection start or selection access; there is no scheduled sweeper. Settings keeps using the first business membership as before.
 - Phase 7 Analytics + Learning.
-- P6-03 follow-ups: live Meta publishing needs a Live-mode app with approved `instagram_content_publish`/`pages_manage_posts`, a public HTTPS `PUBLIC_APP_URL`, `MEDIA_DELIVERY_SECRET`, Page CREATE_CONTENT/PPA and real IG/FB test accounts. UNKNOWN intents and PENDING attempts left by a crashed process wait for P6-05 reconciliation; RETRY_WAIT is retried only by an explicit user click until P6-04. Page tasks are the ones stored at connection time (debug_token rechecks scopes, not tasks).
+- P6-04 follow-ups: UNKNOWN intents (including expired leases whose publish call may have started and legacy P6-03 attempts without the guard marker) wait for P6-05 reconciliation; a late provider result is kept on its attempt only. Legacy RETRY_WAIT rows without `nextAttemptAt` are not retried automatically (explicit user click still works). Precondition-refused intents (e.g. reauthorization required) are re-checked every 5 minutes per worker process and logged with a closed category; there is no alerting integration. Worker logs go to stdout as JSON; no metrics backend. Live Meta publishing through the worker has not been validated.
+- P6-03 follow-ups: live Meta publishing needs a Live-mode app with approved `instagram_content_publish`/`pages_manage_posts`, a public HTTPS `PUBLIC_APP_URL`, `MEDIA_DELIVERY_SECRET`, Page CREATE_CONTENT/PPA and real IG/FB test accounts. UNKNOWN intents and PENDING attempts left by a crashed process wait for P6-05 reconciliation; RETRY_WAIT is now retried automatically by the P6-04 worker only with verified safe evidence. Page tasks are the ones stored at connection time (debug_token rechecks scopes, not tasks).

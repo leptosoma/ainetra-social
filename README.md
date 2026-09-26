@@ -186,3 +186,17 @@ Web sitesi içeriği dış ve güvenilmez veri olarak prompt içinde ayrı sın�
 ## Production notes
 
 Canlıya çıkmadan önce PostgreSQL ve object storage yönetilen altyapıya taşınmalı, `SESSION_SECRET` güçlü bir değerle değiştirilmeli, HTTPS zorunlu olmalı ve gerçek provider credential’ları yalnızca sunucu tarafı secret store’da tutulmalıdır. Gerçek yayınlama eklendiğinde `SocialPublisher` adapter sınırı ile platform kodu domain servislerinden ayrılmalıdır.
+
+### Zamanlanmış yayın worker'ı (P6-04)
+
+Zamanı gelmiş, onaylı Instagram/Facebook gönderileri web sürecinden **ayrı** bir süreçte yayınlanır:
+
+```bash
+npm run db:deploy          # migration'lar worker'dan önce
+npm run worker:publishing  # node --conditions=react-server --import tsx ./scripts/publishing-worker.ts
+```
+
+- Aynı dağıtılmış kod, aynı PostgreSQL ve aynı özel medya deposu kullanılır; `generated/prisma` build sırasında `npm run db:generate` ile üretilmiş olmalıdır. Worker'ın genel bir dinleyicisi yoktur, ancak Instagram imzalı medya URL'si için web uygulaması `PUBLIC_APP_URL` üzerinden HTTPS ile erişilebilir olmalıdır.
+- Gerekli ortam değişkenleri (dağıtım secret deposundan; `.env` okunmaz): `DATABASE_URL`, `LOCAL_STORAGE_ROOT`, `META_APP_ID`, `META_APP_SECRET`, `META_REDIRECT_URI`, `META_GRAPH_API_VERSION`, `META_CREDENTIAL_KEY`, `META_CREDENTIAL_KEY_ID` (rotasyonda `META_CREDENTIAL_PREVIOUS_KEYS`), `PUBLIC_APP_URL`, `MEDIA_DELIVERY_SECRET`. İsteğe bağlı: `PUBLISHING_WORKER_INTERVAL_MS`, `PUBLISHING_WORKER_BATCH_SIZE`, `PUBLISHING_WORKER_CONCURRENCY`, `PUBLISHING_WORKER_SHUTDOWN_TIMEOUT_MS`.
+- Birden fazla worker örneği güvenle çalışabilir; tek talep otoritesi PostgreSQL'deki kısa Serializable CAS talebidir. SIGTERM/SIGINT yeni talebi durdurur, aktif çağrıları sınırlı süre bekler. Loglar stdout'a redakte JSON olarak yazılır.
+- Belirsiz sonuçlar (`UNKNOWN`) otomatik yeniden gönderilmez; mutabakat P6-05'tir. Canlı Meta yayını henüz doğrulanmadı.

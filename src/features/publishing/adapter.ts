@@ -91,6 +91,11 @@ export type SubmitRequest = {
   target: AccountConnection;
   preparedMedia: PreparedMedia[];
   attemptId: string;
+  /**
+   * P6-04: ilk gerçek yayın çağrısından hemen önce çağrılır. true dönerse çağrı-başladı işareti aynı canlı
+   * kiralamaya karşı kalıcı yazılmıştır; false ise kiralama kaybedilmiştir ve adaptör sağlayıcıyı ÇAĞIRMAMALIDIR.
+   */
+  beforePublishCall: () => Promise<boolean>;
 };
 
 export type UnknownOutcomeReason = "TIMEOUT" | "TRANSPORT_ERROR" | "PROVIDER_AMBIGUOUS" | "LEASE_EXPIRED";

@@ -24,6 +24,8 @@ import type { PublishSnapshotV1 } from "./snapshot";
 // - Facebook Page: yalnızca metin gönderisi ve tek JPEG/PNG fotoğraflı gönderi (POST)
 // Adaptör durum yazmaz; yalnızca dondurulmuş snapshot'tan yük üretir ve normalize edilmiş sonuç döndürür.
 // Sağlayıcıya özgü hedef kimliği tarayıcıdan değil, sunucuda çözülen bağlantıdan (target) gelir.
+// P6-04: her gerçek yayın çağrısından (IG /media_publish, FB /feed, FB /photos) hemen önce beforePublishCall
+// koruması çalışır; IG konteyner oluşturma/durum denetimi yayın değildir ve korumadan önce kalır.
 
 export const META_ADAPTER_KEY = PUBLISHING_ROUTES.INSTAGRAM.adapterKey;
 export const META_ADAPTER_VERSION = PUBLISHING_ROUTES.INSTAGRAM.adapterVersion;
@@ -53,7 +55,8 @@ export type MetaAdapterRejection =
   | "CONTAINER_NOT_READY"
   | "MEDIA_DELIVERY_UNAVAILABLE"
   | "CREDENTIAL_UNAVAILABLE"
-  | "RATE_LIMITED";
+  | "RATE_LIMITED"
+  | "PUBLISH_CALL_FENCED";
 
 export type MetaAdapterDeps = {
   graph: MetaPublishingGraphClient;
@@ -79,6 +82,15 @@ export function composeProviderText(snapshot: PublishSnapshotV1): string {
 
 function reject(errorCode: MetaAdapterRejection, retryable = false): Extract<PrepareMediaResult, { kind: "REJECTED" }> {
   return { kind: "REJECTED", retryable, errorCode, diagnostics: { code: errorCode } };
+}
+
+/** P6-04: çağrı-başladı işareti yazılamadıysa yayın çağrısı yapılmaz; hiçbir şey gönderilmemiştir. */
+async function publishCallAllowed(request: SubmitRequest): Promise<boolean> {
+  try {
+    return (await request.beforePublishCall()) === true;
+  } catch {
+    return false;
+  }
 }
 
 function validateText(platform: "INSTAGRAM" | "FACEBOOK", text: string, hasMedia: boolean): MetaAdapterRejection | null {
@@ -163,6 +175,7 @@ export function createMetaPublishingAdapter(deps: MetaAdapterDeps): PublishingAd
       if (check + 1 >= poll.attempts) return reject("CONTAINER_NOT_READY", true);
       await deps.sleep(poll.intervalMs);
     }
+    if (!(await publishCallAllowed(request))) return reject("PUBLISH_CALL_FENCED", true);
     try {
       const { mediaId } = await deps.graph.publishContainer(request.target.externalAccountId!, containerId, accessToken);
       return { kind: "PUBLISHED", providerReference: mediaId, remotePostId: mediaId, publishedAt: deps.now() };
@@ -175,6 +188,7 @@ export function createMetaPublishingAdapter(deps: MetaAdapterDeps): PublishingAd
     const pageId = request.target.externalAccountId!;
     const text = composeProviderText(request.snapshot);
     if (!request.snapshot.media) {
+      if (!(await publishCallAllowed(request))) return reject("PUBLISH_CALL_FENCED", true);
       try {
         const { postId } = await deps.graph.createFeedPost(pageId, text, accessToken);
         return { kind: "PUBLISHED", providerReference: postId, remotePostId: postId, publishedAt: deps.now() };
@@ -184,6 +198,7 @@ export function createMetaPublishingAdapter(deps: MetaAdapterDeps): PublishingAd
     }
     const image = await loadSnapshotImage(deps.storage, request.snapshot, "FACEBOOK");
     if (typeof image === "string") return reject(image);
+    if (!(await publishCallAllowed(request))) return reject("PUBLISH_CALL_FENCED", true);
     try {
       const { postId, photoId } = await deps.graph.createPagePhoto(pageId, { bytes: image.bytes, mimeType: image.mimeType, caption: text }, accessToken);
       const reference = postId ?? photoId!;

@@ -50,9 +50,23 @@ export async function requestPublishIntent(userId: string, scheduledPostId: stri
   const version = expectedVersionSchema.parse(expectedVersion);
   const post = await prisma.scheduledPost.findUnique({ where: { id: scheduledPostId } });
   if (!post) throw new DomainError("Planlanmış gönderi bulunamadı.", "NOT_FOUND");
-  const businessId = post.businessId;
-  await requireMembership(userId, businessId);
+  await requireMembership(userId, post.businessId);
+  return createPublishIntentCore(scheduledPostId, post.businessId, version);
+}
 
+/**
+ * P6-04: oturumsuz, güvenilir worker süreci için giriş noktası (tarayıcıdan çağrılamaz; yalnızca sunucu).
+ * Kullanıcı kimliği uydurulmaz: beklenen sürüm planlı gönderinin kendi onaylı sürümüdür ve kiracı/hesap/
+ * platform/onay/medya denetimleri kullanıcı yoluyla aynı çekirdekte yapılır.
+ */
+export async function ensureScheduledPublishIntent(scheduledPostId: string) {
+  const post = await prisma.scheduledPost.findUnique({ where: { id: scheduledPostId } });
+  if (!post) throw new DomainError("Planlanmış gönderi bulunamadı.", "NOT_FOUND");
+  return createPublishIntentCore(scheduledPostId, post.businessId, post.contentVersion);
+}
+
+/** Kullanıcı ve worker yollarının paylaştığı tek intent oluşturma çekirdeği (yetki denetimi çağıranda). */
+async function createPublishIntentCore(scheduledPostId: string, businessId: string, version: number) {
   return withConflictRetry(() =>
     prisma.$transaction(async (tx) => {
       const fresh = await tx.scheduledPost.findUnique({ where: { id: scheduledPostId } });

@@ -33,6 +33,7 @@ export type PublishIntentEvidence =
   | { kind: "RECONCILED_REJECTED"; retryable: boolean; errorCode: string }
   | { kind: "RECONCILED_NOT_FOUND" }
   | { kind: "RETRY_BUDGET_EXHAUSTED" }
+  | { kind: "LEASE_EXPIRED_BEFORE_PUBLISH_CALL" }
   | { kind: "USER_CANCELLED" }
   | { kind: "SOURCE_INVALIDATED" };
 
@@ -56,6 +57,9 @@ function ruleFor(evidence: PublishIntentEvidence): Rule {
       return { from: ["UNKNOWN"], to: "RETRY_WAIT" };
     case "RETRY_BUDGET_EXHAUSTED":
       return { from: ["RETRY_WAIT"], to: "FAILED" };
+    case "LEASE_EXPIRED_BEFORE_PUBLISH_CALL":
+      // P6-04: yalnızca korumalı denemenin yayın çağrısı işareti yoksa (çağrı başlayamazdı) güvenli ret sayılır.
+      return { from: ["IN_FLIGHT"], to: "RETRY_WAIT" };
     case "USER_CANCELLED":
       return { from: ["PENDING", "RETRY_WAIT"], to: "CANCELLED" };
     case "SOURCE_INVALIDATED":
@@ -104,6 +108,56 @@ export function evidenceForElapsedTime(
     return { kind: "OUTCOME_UNKNOWN", reason: "LEASE_EXPIRED" };
   }
   return null;
+}
+
+/**
+ * P6-04: korumalı deneme protokolünün sürüm işareti. Talep (claim) sırasında denemenin teşhis alanına yazılır;
+ * bu protokolde yayın çağrısı ancak aynı canlı kiralamaya karşı `publishCallStartedAt` kalıcı yazıldıktan sonra
+ * yapılabilir. İşaretsiz (P6-03 veya daha eski) denemeler kanıtlanamaz sayılır.
+ */
+export const PUBLISH_CALL_GUARD_MARKER = "P6-04";
+
+export type ExpiredLeaseAttemptEvidence = {
+  status: PublishAttemptStatus;
+  errorCode: string | null;
+  diagnostics: unknown;
+  publishCallStartedAt: Date | null;
+} | null;
+
+function isGuardedAttempt(diagnostics: unknown): boolean {
+  return Boolean(diagnostics && typeof diagnostics === "object" && (diagnostics as { publishGuard?: unknown }).publishGuard === PUBLISH_CALL_GUARD_MARKER);
+}
+
+/**
+ * P6-04: süresi dolmuş IN_FLIGHT için kanıta dayalı karar. Kiralama süresinin dolması tek başına "yayınlanmadı"
+ * kanıtı DEĞİLDİR. Yalnızca korumalı protokolle oluşturulmuş, yayın çağrısı işareti boş ve henüz sonuçlanmamış
+ * (veya yayın çağrısından önce bırakılmış) deneme güvenli ön-yayın kanıtıdır; diğer her durum UNKNOWN'dur.
+ */
+export function evidenceForExpiredLease(
+  subject: { state: PublishIntentState; leaseExpiresAt: Date | null },
+  attempt: ExpiredLeaseAttemptEvidence,
+  now: Date,
+): PublishIntentEvidence | null {
+  const elapsed = evidenceForElapsedTime(subject, now);
+  if (!elapsed) return null;
+  if (!attempt || attempt.publishCallStartedAt || !isGuardedAttempt(attempt.diagnostics)) return elapsed;
+  const unsent = attempt.status === "PENDING" || (attempt.status === "FAILED" && attempt.errorCode === "CLAIM_LOST_BEFORE_PUBLISH");
+  return unsent ? { kind: "LEASE_EXPIRED_BEFORE_PUBLISH_CALL" } : elapsed;
+}
+
+/** P6-04: toplam sağlayıcı denemesi bütçesi (ilk deneme + en fazla iki yeniden deneme). */
+export const MAX_PUBLISH_ATTEMPTS = 3;
+
+/** P6-04: deterministik bekleme; kaydedilen sonuçtan ölçülür. 1. güvenli retten sonra 60 sn, 2.'den sonra 5 dk. */
+export const RETRY_BACKOFF_MS: ReadonlyArray<number> = [60_000, 5 * 60_000];
+
+export type RetryPlan = { kind: "RETRY"; nextAttemptAt: Date } | { kind: "EXHAUSTED" };
+
+/** `attemptNumber` yeni sonuçlanan denemenin numarasıdır (1'den başlar). */
+export function planRetry(attemptNumber: number, recordedAt: Date): RetryPlan {
+  if (!Number.isInteger(attemptNumber) || attemptNumber < 1 || attemptNumber >= MAX_PUBLISH_ATTEMPTS) return { kind: "EXHAUSTED" };
+  const delay = RETRY_BACKOFF_MS[attemptNumber - 1];
+  return { kind: "RETRY", nextAttemptAt: new Date(recordedAt.getTime() + delay) };
 }
 
 /** submit() sonucunu kanıta çevirir. */
