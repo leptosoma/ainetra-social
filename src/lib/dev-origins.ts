@@ -1,11 +1,12 @@
 // Next 16 geliştirme sunucusu, dev kaynaklarına (HMR soketi vb.) yalnızca localhost'tan ve
 // sunucunun başlatıldığı ana makineden izin verir. Uygulama başka bir ana makineden açıldığında
-// (ör. Meta için gereken HTTPS tünel alan adı ya da ağ IP'si) istemci paketi hidrate olmaz:
-// sunucuda çizilen bağlantılar çalışmaya devam eder ama yalnızca tarayıcıda kurulan masaüstü
-// FullCalendar ızgarası hiç oluşmaz. Uygulamanın zaten yapılandırılmış genel adresleri bu yüzden
-// geliştirme sunucusuna izinli köken olarak eklenir. Üretim derlemesini etkilemez.
+// (ör. `127.0.0.1`, Meta için gereken HTTPS tünel alan adı ya da ağ IP'si) istemci paketi
+// hidrate olmaz: sunucuda çizilen bağlantılar çalışmaya devam eder ama yalnızca tarayıcıda kurulan
+// masaüstü FullCalendar ızgarası hiç oluşmaz. Uygulamanın zaten yapılandırılmış genel adresleri bu yüzden
+// geliştirme sunucusuna izinli köken olarak eklenir. Next `localhost`'u kabul eder ama geri döngü
+// adresi `127.0.0.1`'i kabul etmez; bu yüzden o da her zaman eklenir. Üretim derlemesini etkilemez.
 export function devOriginHosts(env: Record<string, string | undefined> = process.env): string[] {
-  const hosts = new Set<string>();
+  const hosts = new Set<string>(["127.0.0.1"]);
   for (const value of [env.PUBLIC_APP_URL, env.META_REDIRECT_URI]) {
     if (!value) continue;
     try {
